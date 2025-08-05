@@ -1,0 +1,273 @@
+/* style.css */
+
+:root {
+    --primary-color: #4f46e5;
+    --secondary-color: #6b7280;
+    --accent-color: #ef4444;
+    --success-color: #22c55e;
+    --warning-color: #f59e0b;
+    --info-bg: #eef2ff;
+    --info-text: #4338ca;
+    --error-bg: #fee2e2;
+    --error-text: #b91c1c;
+    --log-bg: #1f2937;
+    --log-text: #d1d5db;
+    --log-success: #86efac;
+    --log-error: #fca5a5;
+    --log-warning: #fde047;
+    --button-hover: #4338ca;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f3f4f6;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 1rem;
+}
+
+.app-container {
+    background-color: #ffffff;
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 600px;
+    position: relative;
+}
+
+.app-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.logo {
+    width: 4rem;
+    height: 4rem;
+    background-color: var(--primary-color);
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.logo-icon {
+    height: 2.5rem;
+    width: 2.5rem;
+    color: #ffffff;
+}
+
+.title {
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.subtitle {
+    color: var(--secondary-color);
+    margin-top: 0.25rem;
+}
+
+/* General button styling */
+.btn {
+    padding: 0.75rem 1.5rem;
+    font-weight: 700;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    border: none;
+    transition: background-color 0.3s ease;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: #ffffff;
+}
+
+.btn-primary:hover {
+    background-color: var(--button-hover);
+}
+
+.btn-secondary {
+    background-color: #e5e7eb;
+    color: #1f2937;
+}
+
+.btn-secondary:hover {
+    background-color: #d1d5db;
+}
+
+/* Form inputs */
+.form-input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 2px solid #d1d5db;
+    border-radius: 0.5rem;
+    transition: border-color 0.3s ease;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+/* Status messages */
+.status-box {
+    padding: 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+}
+
+.status-box.warning {
+    background-color: #fffbeb;
+    border: 1px solid #fcd34d;
+    color: #92400e;
+}
+
+/* Recording UI */
+.recording-btn {
+    width: 6rem;
+    height: 6rem;
+    border-radius: 9999px;
+    background-color: var(--accent-color);
+    color: #ffffff;
+    font-size: 1.875rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: auto;
+    box-shadow: 0 10px 15px -3px rgba(239, 68, 68, 0.5);
+    transition: all 0.2s ease;
+}
+
+.recording-btn:hover {
+    transform: scale(1.1);
+}
+
+.recording-btn.pulse {
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+/* Playlist items */
+.playlist-item {
+    background-color: #f9fafb;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    margin-bottom: 0.5rem;
+}
+.playlist-item-card {
+    background-color: #eef2ff;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    min-width: 150px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.playlist-item-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+.playlist-card-container {
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+    padding-bottom: 1rem;
+}
+
+/* Log container */
+.log-container {
+    margin-top: 2rem;
+    background-color: var(--log-bg);
+    color: var(--log-text);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    max-height: 10rem;
+    overflow-y: auto;
+}
+
+.log-header {
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--log-success);
+    margin-bottom: 0.5rem;
+}
+
+.log-item {
+    display: flex;
+    gap: 0.5rem;
+    font-family: monospace;
+    font-size: 0.75rem;
+    line-height: 1.25;
+}
+
+.log-item.success {
+    color: var(--log-success);
+}
+
+/* Modal and FAB styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    width: 90%;
+    max-width: 400px;
+}
+
+.fab-btn {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 4rem;
+    height: 4rem;
+    border-radius: 9999px;
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 2.5rem;
+    line-height: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+    z-index: 10;
+}
+
+.fab-btn:hover {
+    transform: scale(1.1);
+}
+
+.fab-btn.active {
+    background-color: var(--success-color);
+    animation: pulse 1.5s infinite;
+}
