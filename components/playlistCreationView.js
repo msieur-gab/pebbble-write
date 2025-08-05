@@ -88,10 +88,6 @@ class PlaylistCreationView extends HTMLElement {
                 .clip-card:hover {
                     border-color: var(--primary-color);
                 }
-                .drag-over {
-                    border: 2px dashed var(--primary-color);
-                    background-color: var(--info-bg);
-                }
             </style>
             <div id="playlistCreationView">
                 <div class="text-center space-y-4">
@@ -165,7 +161,8 @@ class PlaylistCreationView extends HTMLElement {
         this.shadowRoot.querySelector('#music-file-input').addEventListener('change', (e) => this.handleMusicFileUpload(e));
         this.shadowRoot.querySelector('#save-clip-btn').addEventListener('click', () => this.saveClipToPlaylist());
         
-        this.shadowRoot.querySelector('#clips-container').addEventListener('click', (e) => {
+        const clipsContainer = this.shadowRoot.querySelector('#clips-container');
+        clipsContainer.addEventListener('click', (e) => {
             if (e.target.classList.contains('remove-clip-btn')) {
                 const clipId = parseInt(e.target.dataset.id);
                 this.removeClipFromPlaylist(clipId);
@@ -182,56 +179,6 @@ class PlaylistCreationView extends HTMLElement {
         this.shadowRoot.querySelector('#finalizePlaylistBtn').addEventListener('click', () => {
             eventBus.publish('finalize-playlist-requested');
         });
-        
-        // --- Drag and drop event listeners ---
-        const clipsContainer = this.shadowRoot.querySelector('#clips-container');
-        clipsContainer.addEventListener('dragstart', (e) => {
-            e.target.classList.add('is-dragging');
-            e.dataTransfer.setData('text/plain', e.target.dataset.id);
-        });
-        
-        clipsContainer.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            const draggingElement = this.shadowRoot.querySelector('.is-dragging');
-            const afterElement = this.getDragAfterElement(clipsContainer, e.clientY);
-            if (afterElement == null) {
-                clipsContainer.appendChild(draggingElement);
-            } else {
-                clipsContainer.insertBefore(draggingElement, afterElement);
-            }
-        });
-        
-        clipsContainer.addEventListener('drop', (e) => {
-            e.preventDefault();
-            const draggedId = parseInt(e.dataTransfer.getData('text/plain'));
-            const droppedOnId = e.target.closest('.playlist-clip-item').dataset.id;
-            
-            const draggedIndex = this.currentPlaylistClips.findIndex(clip => clip.id === draggedId);
-            const droppedOnIndex = this.currentPlaylistClips.findIndex(clip => clip.id === parseInt(droppedOnId));
-            
-            const [draggedItem] = this.currentPlaylistClips.splice(draggedIndex, 1);
-            this.currentPlaylistClips.splice(droppedOnIndex, 0, draggedItem);
-            
-            this.renderClips();
-        });
-        
-        clipsContainer.addEventListener('dragend', (e) => {
-            e.target.classList.remove('is-dragging');
-        });
-    }
-
-    getDragAfterElement(container, y) {
-        const draggableElements = [...container.querySelectorAll('.playlist-clip-item:not(.is-dragging)')];
-        
-        return draggableElements.reduce((closest, child) => {
-            const box = child.getBoundingClientRect();
-            const offset = y - box.top - box.height / 2;
-            if (offset < 0 && offset > closest.offset) {
-                return { offset: offset, element: child };
-            } else {
-                return closest;
-            }
-        }, { offset: Number.NEGATIVE_INFINITY }).element;
     }
 
     async addClipToPlaylist(clipId) {
@@ -288,8 +235,6 @@ class PlaylistCreationView extends HTMLElement {
         for (const clip of this.currentPlaylistClips) {
             const item = document.createElement('div');
             item.className = 'playlist-clip-item';
-            item.setAttribute('draggable', true);
-            item.dataset.id = clip.id;
             const audioUrl = URL.createObjectURL(clip.audioBlob);
 
             item.innerHTML = `

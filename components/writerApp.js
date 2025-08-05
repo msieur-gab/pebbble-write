@@ -7,7 +7,6 @@ import { EncryptionService } from '../services/encryptionService.js';
 import { StorageService } from '../services/storageService.js';
 import { MessageDb } from '../services/messageDb.js';
 import { NFCService } from '../services/nfcService.js';
-import { config } from '../config.js';
 
 import './apiSetupForm.js';
 import './fabComponent.js';
@@ -97,25 +96,16 @@ class WriterApp extends HTMLElement {
     }
 
     async loadState() {
-        // Use credentials from config file if they are set
-        if (config.PINATA_API_KEY && config.PINATA_SECRET) {
-            this.storageService = new StorageService(config.PINATA_API_KEY, config.PINATA_SECRET);
-            this.showStep('playlistView');
-            log('Using credentials from config file.', 'info');
-        } else {
-            // Otherwise, check IndexedDB or show the setup form
-            const apiKey = (await this.db.getSetting('apiKey'))?.value || '';
-            const secret = (await this.db.getSetting('secret'))?.value || '';
+        const apiKey = (await this.db.getSetting('apiKey'))?.value || '';
+        const secret = (await this.db.getSetting('secret'))?.value || '';
 
-            if (apiKey && secret) {
-                this.storageService = new StorageService(apiKey, secret);
-                this.shadowRoot.querySelector('#pinata-api-key').value = apiKey;
-                this.shadowRoot.querySelector('#pinata-secret').value = secret;
-                this.showStep('playlistView');
-                log('Using credentials from local storage.', 'info');
-            } else {
-                this.showStep('apiSetupForm');
-            }
+        if (apiKey && secret) {
+            this.storageService = new StorageService(apiKey, secret);
+            this.shadowRoot.querySelector('#pinata-api-key').value = apiKey;
+            this.shadowRoot.querySelector('#pinata-secret').value = secret;
+            this.showStep('playlistView');
+        } else {
+            this.showStep('apiSetupForm');
         }
     }
     
@@ -191,7 +181,7 @@ class WriterApp extends HTMLElement {
 
         eventBus.subscribe('save-playlist-requested', (data) => this.savePlaylist(data));
         eventBus.subscribe('back-to-playlists', () => this.showStep('playlistView'));
-        eventBus.subscribe('finalize-playlist-requested', (data) => this.finalizeAndWritePlaylist(data));
+        eventBus.subscribe('finalize-playlist-requested', () => this.showStep('serialModal'));
         eventBus.subscribe('modal-close', () => this.showStep('playlistCreationView'));
         eventBus.subscribe('scan-serial-request', () => this.handleScanRequest());
         eventBus.subscribe('manual-serial-set', (serial) => this.handleManualSerialSet(serial));
@@ -251,19 +241,19 @@ class WriterApp extends HTMLElement {
         this.finalizeAndWritePlaylist();
     }
     
-    async finalizeAndWritePlaylist(data) {
-        const playlistToFinalize = data;
+    async finalizeAndWritePlaylist() {
+        const currentPlaylistView = this.shadowRoot.querySelector('playlist-creation-view');
+        const playlistClips = currentPlaylistView.currentPlaylistClips;
         
-        if (playlistToFinalize.audioClipIds.length === 0) {
+        if (playlistClips.length === 0) {
             log('No clips in the playlist to finalize.', 'warning');
-            this.showStep('playlistCreationView');
+            this.hideSerialModal();
             return;
         }
 
-        log(`Finalizing playlist "${playlistToFinalize.name}" with ${playlistToFinalize.audioClipIds.length} clips.`, 'info');
+        log(`Finalizing playlist "${currentPlaylistView.shadowRoot.querySelector('#playlistTitle').value}" with ${playlistClips.length} clips.`, 'info');
         log('Clips to be uploaded:');
-        const clipsToUpload = await this.db.db.audioClips.where('id').anyOf(playlistToFinalize.audioClipIds).toArray();
-        clipsToUpload.forEach(clip => {
+        playlistClips.forEach(clip => {
             log(`- ID: ${clip.id}, Title: "${clip.title}"`);
         });
 
@@ -275,7 +265,7 @@ class WriterApp extends HTMLElement {
 
         const playlistManifest = { version: 'playlist-v1', messages: [] };
         
-        for (const message of clipsToUpload) {
+        for (const message of playlistClips) {
             try {
                 const timestamp = Date.now();
                 const encryptionKey = await this.encryptionService.deriveEncryptionKey(this.currentTagSerial, timestamp);
@@ -300,13 +290,14 @@ class WriterApp extends HTMLElement {
             const finalManifestHash = await this.storageService.uploadMessagePackage(playlistManifest);
             const finalNfcUrl = urlParser.createSecureNfcUrl({ playlistHash: finalManifestHash });
             
-            await this.db.saveFinalizedPlaylist(
-                playlistToFinalize.name,
-                finalManifestHash,
-                this.currentTagSerial,
-                playlistToFinalize.audioClipIds
-            );
-            log(`Playlist "${playlistToFinalize.name}" finalized and saved.`, 'success');
+            const playlist = await this.db.db.finalizedPlaylists.get(this.currentPlaylistId);
+            if (playlist) {
+                await this.db.db.finalizedPlaylists.update(this.currentPlaylistId, {
+                    playlistHash: finalManifestHash,
+                    tagSerial: this.currentTagSerial
+                });
+                log(`Playlist "${playlist.name}" finalized and saved.`, 'success');
+            }
 
             this.showStep('writerResults');
             this.shadowRoot.querySelector('#nfc-url-display').textContent = finalNfcUrl;
@@ -335,7 +326,6 @@ class WriterApp extends HTMLElement {
                     log('Serial match confirmed. Writing URL to tag.', 'success');
                     await this.nfcService.writeUrl(url);
                     writeNfcBtn.textContent = 'Write Successful!';
-                    this.showStep('playlistView'); // Return to home screen after successful write
                 } else {
                     log(`SECURITY ERROR: Scanned serial "${scannedSerial}" does not match original serial "${this.currentTagSerial}".`, 'error');
                     writeNfcBtn.textContent = 'Serial Mismatch - Try Again';
