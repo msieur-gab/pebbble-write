@@ -60,7 +60,6 @@ class PlaylistCreationView extends HTMLElement {
                     align-items: center; 
                     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); 
                     margin-bottom: 0.5rem;
-                    cursor: grab;
                 }
                 .clip-controls {
                     display: flex;
@@ -92,10 +91,6 @@ class PlaylistCreationView extends HTMLElement {
                 .drag-over {
                     border: 2px dashed var(--primary-color);
                     background-color: var(--info-bg);
-                }
-                .drag-handle {
-                    cursor: grab;
-                    touch-action: none;
                 }
             </style>
             <div id="playlistCreationView">
@@ -170,8 +165,7 @@ class PlaylistCreationView extends HTMLElement {
         this.shadowRoot.querySelector('#music-file-input').addEventListener('change', (e) => this.handleMusicFileUpload(e));
         this.shadowRoot.querySelector('#save-clip-btn').addEventListener('click', () => this.saveClipToPlaylist());
         
-        const clipsContainer = this.shadowRoot.querySelector('#clips-container');
-        clipsContainer.addEventListener('click', (e) => {
+        this.shadowRoot.querySelector('#clips-container').addEventListener('click', (e) => {
             if (e.target.classList.contains('remove-clip-btn')) {
                 const clipId = parseInt(e.target.dataset.id);
                 this.removeClipFromPlaylist(clipId);
@@ -189,18 +183,17 @@ class PlaylistCreationView extends HTMLElement {
             eventBus.publish('finalize-playlist-requested');
         });
         
-        // --- Drag and drop event listeners for mouse (desktop) ---
-        let draggedItem = null;
+        // --- Drag and drop event listeners ---
+        const clipsContainer = this.shadowRoot.querySelector('#clips-container');
         clipsContainer.addEventListener('dragstart', (e) => {
-            draggedItem = e.target.closest('.playlist-clip-item');
-            draggedItem.classList.add('is-dragging');
-            e.dataTransfer.setData('text/plain', draggedItem.dataset.id);
+            e.target.classList.add('is-dragging');
+            e.dataTransfer.setData('text/plain', e.target.dataset.id);
         });
         
         clipsContainer.addEventListener('dragover', (e) => {
             e.preventDefault();
-            const afterElement = this.getDragAfterElement(clipsContainer, e.clientY);
             const draggingElement = this.shadowRoot.querySelector('.is-dragging');
+            const afterElement = this.getDragAfterElement(clipsContainer, e.clientY);
             if (afterElement == null) {
                 clipsContainer.appendChild(draggingElement);
             } else {
@@ -211,82 +204,19 @@ class PlaylistCreationView extends HTMLElement {
         clipsContainer.addEventListener('drop', (e) => {
             e.preventDefault();
             const draggedId = parseInt(e.dataTransfer.getData('text/plain'));
-            const droppedOnItem = e.target.closest('.playlist-clip-item');
-            if (!droppedOnItem) return;
-
-            const droppedOnId = parseInt(droppedOnItem.dataset.id);
-            const draggedIndex = this.currentPlaylistClips.findIndex(clip => clip.id === draggedId);
-            const droppedOnIndex = this.currentPlaylistClips.findIndex(clip => clip.id === droppedOnId);
+            const droppedOnId = e.target.closest('.playlist-clip-item').dataset.id;
             
-            const [draggedClip] = this.currentPlaylistClips.splice(draggedIndex, 1);
-            this.currentPlaylistClips.splice(droppedOnIndex, 0, draggedClip);
+            const draggedIndex = this.currentPlaylistClips.findIndex(clip => clip.id === draggedId);
+            const droppedOnIndex = this.currentPlaylistClips.findIndex(clip => clip.id === parseInt(droppedOnId));
+            
+            const [draggedItem] = this.currentPlaylistClips.splice(draggedIndex, 1);
+            this.currentPlaylistClips.splice(droppedOnIndex, 0, draggedItem);
             
             this.renderClips();
-            eventBus.publish('playlist-reordered', { playlistId: this.currentPlaylistId, newOrder: this.currentPlaylistClips.map(c => c.id) });
         });
         
         clipsContainer.addEventListener('dragend', (e) => {
-            draggedItem.classList.remove('is-dragging');
-            draggedItem = null;
-        });
-
-        // --- Touch event listeners for mobile devices ---
-        let touchDragElement = null;
-        let originalY = 0;
-
-        clipsContainer.addEventListener('touchstart', (e) => {
-            const item = e.target.closest('.playlist-clip-item');
-            if (item && e.target.closest('.drag-handle')) {
-                e.preventDefault();
-                touchDragElement = item;
-                touchDragElement.classList.add('is-dragging');
-                touchDragElement.style.position = 'absolute';
-                touchDragElement.style.width = touchDragElement.offsetWidth + 'px';
-                touchDragElement.style.zIndex = '1000';
-                originalY = touchDragElement.offsetTop;
-            }
-        });
-
-        clipsContainer.addEventListener('touchmove', (e) => {
-            if (touchDragElement) {
-                e.preventDefault();
-                const touch = e.touches[0];
-                const newY = touch.clientY - touchDragElement.offsetHeight / 2;
-                touchDragElement.style.top = newY + 'px';
-
-                const afterElement = this.getDragAfterElement(clipsContainer, touch.clientY);
-                if (afterElement == null) {
-                    clipsContainer.appendChild(touchDragElement);
-                } else {
-                    clipsContainer.insertBefore(touchDragElement, afterElement);
-                }
-            }
-        });
-
-        clipsContainer.addEventListener('touchend', (e) => {
-            if (touchDragElement) {
-                const draggedId = parseInt(touchDragElement.dataset.id);
-                const targetElement = this.getDragAfterElement(clipsContainer, e.changedTouches[0].clientY);
-                
-                let newIndex = clipsContainer.children.length - 1;
-                if (targetElement) {
-                    const droppedOnId = parseInt(targetElement.dataset.id);
-                    newIndex = this.currentPlaylistClips.findIndex(clip => clip.id === droppedOnId);
-                }
-
-                const draggedIndex = this.currentPlaylistClips.findIndex(clip => clip.id === draggedId);
-                const [draggedItem] = this.currentPlaylistClips.splice(draggedIndex, 1);
-                this.currentPlaylistClips.splice(newIndex, 0, draggedItem);
-
-                touchDragElement.classList.remove('is-dragging');
-                touchDragElement.style.position = '';
-                touchDragElement.style.width = '';
-                touchDragElement.style.zIndex = '';
-                touchDragElement = null;
-                
-                this.renderClips();
-                eventBus.publish('playlist-reordered', { playlistId: this.currentPlaylistId, newOrder: this.currentPlaylistClips.map(c => c.id) });
-            }
+            e.target.classList.remove('is-dragging');
         });
     }
 
@@ -363,9 +293,6 @@ class PlaylistCreationView extends HTMLElement {
             const audioUrl = URL.createObjectURL(clip.audioBlob);
 
             item.innerHTML = `
-                <div class="drag-handle">
-                    <svg id="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" style="width: 20px; height: 20px; fill: var(--secondary-color);"><defs><style>.cls-1{fill:none;}</style></defs><title>drag--vertical</title><polygon points="4 20 15 20 15 26.17 12.41 23.59 11 25 16 30 21 25 19.59 23.59 17 26.17 17 20 28 20 28 18 4 18 4 20"/><polygon points="11 7 12.41 8.41 15 5.83 15 12 4 12 4 14 28 14 28 12 17 12 17 5.83 19.59 8.41 21 7 16 2 11 7"/><rect id="_Transparent_Rectangle_" data-name="&lt;Transparent Rectangle&gt;" class="cls-1" width="32" height="32"/></svg>
-                </div>
                 <span>${clip.title}</span>
                 <div class="clip-controls">
                     <audio controls src="${audioUrl}"></audio>
