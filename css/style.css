@@ -129,6 +129,27 @@ body {
     color: #92400e;
 }
 
+.process-status {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    background-color: var(--info-bg);
+    color: var(--info-text);
+    text-align: center;
+    transition: background-color 0.3s ease;
+}
+
+.process-status.success {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.process-status.error {
+    background-color: var(--error-bg);
+    color: var(--error-text);
+}
+
+
 /* Recording UI */
 .recording-btn {
     width: 6rem;

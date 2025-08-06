@@ -62,6 +62,7 @@ class WriterApp extends HTMLElement {
                 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
                 .playlist-item { background-color: #f9fafb; padding: 0.75rem; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
                 .log-container { margin-top: 2rem; background-color: var(--log-bg); color: var(--log-text); border-radius: 0.5rem; padding: 1rem; max-height: 10rem; overflow-y: auto; }
+                .process-status { margin-top: 1rem; padding: 1rem; border-radius: 0.5rem; background-color: var(--info-bg); color: var(--info-text); text-align: center; }
             </style>
             <div id="apiSetupForm">
                 <div class="status-box warning">
@@ -90,6 +91,7 @@ class WriterApp extends HTMLElement {
                 <button id="backToPlaylistsBtn" class="btn btn-secondary">Back to Playlists</button>
             </div>
             
+            <div id="processStatus" class="process-status hidden"></div>
             <fab-component class="hidden"></fab-component>
             <serial-modal class="hidden"></serial-modal>
         `;
@@ -121,12 +123,14 @@ class WriterApp extends HTMLElement {
         const playlistCreationView = this.shadowRoot.querySelector('playlist-creation-view');
         const fab = this.shadowRoot.querySelector('fab-component');
         const serialModal = this.shadowRoot.querySelector('serial-modal');
+        const processStatus = this.shadowRoot.querySelector('#processStatus');
 
         mainAppContainer.classList.add('hidden');
         playlistView.classList.add('hidden');
         playlistCreationView.classList.add('hidden');
         fab.classList.add('hidden');
         serialModal.classList.add('hidden');
+        processStatus.classList.add('hidden');
         
         switch(stepId) {
             case 'apiSetupForm':
@@ -146,6 +150,9 @@ class WriterApp extends HTMLElement {
                 break;
             case 'serialModal':
                 serialModal.classList.remove('hidden');
+                break;
+            case 'processing':
+                processStatus.classList.remove('hidden');
                 break;
         }
     }
@@ -231,9 +238,17 @@ class WriterApp extends HTMLElement {
                     this.nfcService.stopReader();
                 } else {
                     log('No serial number found on the tag.', 'warning');
+                    this.shadowRoot.querySelector('#processStatus').textContent = 'Could not read serial from the tag. Please try again.';
+                    this.showStep('processing');
+                    setTimeout(() => this.showStep('serialModal'), 3000);
                 }
             });
-        } catch (e) { log(`NFC scan failed: ${e.message}`, 'error'); }
+        } catch (e) { 
+            log(`NFC scan failed: ${e.message}`, 'error');
+            this.showStep('processing');
+            this.shadowRoot.querySelector('#processStatus').textContent = 'NFC reader failed to start. Ensure your device supports it and try again.';
+            setTimeout(() => this.showStep('serialModal'), 5000);
+        }
     }
     
     handleManualSerialSet(serial) {
@@ -242,31 +257,31 @@ class WriterApp extends HTMLElement {
     }
     
     async finalizeAndWritePlaylist() {
+        const processStatusEl = this.shadowRoot.querySelector('#processStatus');
+        this.showStep('processing');
+        
         const currentPlaylistView = this.shadowRoot.querySelector('playlist-creation-view');
         const playlistClips = currentPlaylistView.currentPlaylistClips;
         
         if (playlistClips.length === 0) {
             log('No clips in the playlist to finalize.', 'warning');
-            this.hideSerialModal();
+            processStatusEl.textContent = 'Cannot finalize an empty playlist. Please add some audio clips.';
+            setTimeout(() => this.showStep('playlistCreationView'), 3000);
             return;
         }
 
-        log(`Finalizing playlist "${currentPlaylistView.shadowRoot.querySelector('#playlistTitle').value}" with ${playlistClips.length} clips.`, 'info');
-        log('Clips to be uploaded:');
-        playlistClips.forEach(clip => {
-            log(`- ID: ${clip.id}, Title: "${clip.title}"`);
-        });
-
+        processStatusEl.textContent = `Starting finalization for playlist "${currentPlaylistView.shadowRoot.querySelector('#playlistTitle').value}".`;
+        
         this.hideSerialModal();
         const fabBtn = this.shadowRoot.querySelector('fab-component');
-        if (fabBtn) {
-            fabBtn.disabled = true;
-        }
+        if (fabBtn) { fabBtn.disabled = true; }
 
         const playlistManifest = { version: 'playlist-v1', messages: [] };
         
-        for (const message of playlistClips) {
+        for (let i = 0; i < playlistClips.length; i++) {
+            const message = playlistClips[i];
             try {
+                processStatusEl.textContent = `Processing clip ${i + 1} of ${playlistClips.length}: "${message.title}"`;
                 const timestamp = Date.now();
                 const encryptionKey = await this.encryptionService.deriveEncryptionKey(this.currentTagSerial, timestamp);
                 const audioBuffer = await message.audioBlob.arrayBuffer();
@@ -283,35 +298,46 @@ class WriterApp extends HTMLElement {
                 log(`Uploaded clip "${message.title}" (ID: ${message.id})`, 'success');
             } catch (err) {
                 log(`Failed to process message "${message.title}": ${err.message}`, 'error');
+                processStatusEl.textContent = `Failed to upload clip "${message.title}". Please check your internet connection and Pinata credentials.`;
+                setTimeout(() => this.showStep('playlistCreationView'), 5000);
+                if (fabBtn) { fabBtn.disabled = false; }
+                return;
             }
         }
-
-        if (playlistManifest.messages.length > 0) {
-            const finalManifestHash = await this.storageService.uploadMessagePackage(playlistManifest);
-            const finalNfcUrl = urlParser.createSecureNfcUrl({ playlistHash: finalManifestHash });
-            
-            const playlist = await this.db.db.finalizedPlaylists.get(this.currentPlaylistId);
-            if (playlist) {
-                await this.db.db.finalizedPlaylists.update(this.currentPlaylistId, {
-                    playlistHash: finalManifestHash,
-                    tagSerial: this.currentTagSerial
-                });
-                log(`Playlist "${playlist.name}" finalized and saved.`, 'success');
-            }
-
-            this.showStep('writerResults');
-            this.shadowRoot.querySelector('#nfc-url-display').textContent = finalNfcUrl;
-            log('Playlist successfully uploaded and URL generated!', 'success');
         
-            this.writeNfcUrl(finalNfcUrl);
+        if (playlistManifest.messages.length > 0) {
+            processStatusEl.textContent = 'All clips uploaded. Finalizing playlist manifest...';
+            try {
+                const finalManifestHash = await this.storageService.uploadMessagePackage(playlistManifest);
+                const finalNfcUrl = urlParser.createSecureNfcUrl({ playlistHash: finalManifestHash });
+                
+                const playlist = await this.db.getPlaylistById(this.currentPlaylistId);
+                if (playlist) {
+                    await this.db.saveFinalizedPlaylist(playlist.name, finalManifestHash, this.currentTagSerial, playlist.audioClipIds);
+                    log(`Playlist "${playlist.name}" finalized and saved.`, 'success');
+                } else {
+                    // Handle case where playlist might not be saved yet
+                    const playlistName = currentPlaylistView.shadowRoot.querySelector('#playlistTitle').value;
+                    const playlistAudioClipIds = currentPlaylistView.currentPlaylistClips.map(c => c.id);
+                    await this.db.saveFinalizedPlaylist(playlistName, finalManifestHash, this.currentTagSerial, playlistAudioClipIds);
+                    log(`New playlist "${playlistName}" finalized and saved.`, 'success');
+                }
+    
+                this.showStep('writerResults');
+                this.shadowRoot.querySelector('#nfc-url-display').textContent = finalNfcUrl;
+                log('Playlist successfully uploaded and URL generated!', 'success');
+            } catch (err) {
+                log(`Failed to upload final playlist manifest: ${err.message}`, 'error');
+                processStatusEl.textContent = 'Failed to create the final playlist. Please try again.';
+                setTimeout(() => this.showStep('playlistCreationView'), 5000);
+            }
         } else {
             log('No clips were successfully processed, cannot finalize playlist.', 'error');
-            this.showStep('playlistCreationView');
+            processStatusEl.textContent = 'An error occurred during file processing. No clips were finalized.';
+            setTimeout(() => this.showStep('playlistCreationView'), 5000);
         }
 
-        if (fabBtn) {
-            fabBtn.disabled = false;
-        }
+        if (fabBtn) { fabBtn.disabled = false; }
     }
     
     async writeNfcUrl(url) {
@@ -324,18 +350,29 @@ class WriterApp extends HTMLElement {
                 this.nfcService.stopReader();
                 if (scannedSerial === this.currentTagSerial) {
                     log('Serial match confirmed. Writing URL to tag.', 'success');
+                    writeNfcBtn.textContent = 'Writing...';
                     await this.nfcService.writeUrl(url);
                     writeNfcBtn.textContent = 'Write Successful!';
+                    writeNfcBtn.disabled = false;
                 } else {
                     log(`SECURITY ERROR: Scanned serial "${scannedSerial}" does not match original serial "${this.currentTagSerial}".`, 'error');
                     writeNfcBtn.textContent = 'Serial Mismatch - Try Again';
                     writeNfcBtn.disabled = false;
+                    // Provide a user-friendly message
+                    this.shadowRoot.querySelector('#nfc-url-display').textContent = 'SECURITY ERROR: The Pebbble you just tapped is not the same one you scanned initially. Please tap the correct Pebbble.';
                 }
             });
         } catch (e) {
             log(`NFC scan/write failed: ${e.message}`, 'error');
+            let userMessage = 'NFC write failed. Please ensure the tag is blank and try again.';
+            if (e.message.includes('NDEFReader') || e.message.includes('NDEFWriter')) {
+                userMessage = 'Web NFC API is not supported on this device or browser.';
+            } else if (e.message.includes('permission')) {
+                userMessage = 'NFC permission denied. Please grant permission in your browser settings.';
+            }
             writeNfcBtn.textContent = 'Write Failed';
             writeNfcBtn.disabled = false;
+            this.shadowRoot.querySelector('#nfc-url-display').textContent = userMessage;
         }
     }
 }
