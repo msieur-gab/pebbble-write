@@ -1,10 +1,10 @@
-// components/playlistView.js
+// components/playlistsView.js
 
 import { log } from '../utils/log.js';
 import { eventBus } from '../services/eventBus.js';
 import { MessageDb } from '../services/messageDb.js';
 
-class PlaylistView extends HTMLElement {
+class PlaylistsViewComponent extends HTMLElement {
     constructor() {
         super();
         this.attachShadow({ mode: 'open' });
@@ -22,34 +22,6 @@ class PlaylistView extends HTMLElement {
                 .playlist-manager-container {
                     padding: 1rem;
                 }
-                .playlist-item {
-                    background-color: #f9fafb;
-                    padding: 0.75rem;
-                    border-radius: 0.5rem;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-                    margin-bottom: 0.5rem;
-                }
-                .playlist-item button {
-                    cursor: pointer;
-                    background: none;
-                    border: none;
-                    color: var(--primary-color);
-                    font-weight: bold;
-                    margin-left: 1rem;
-                }
-                .playlist-item button.delete {
-                    color: var(--accent-color);
-                }
-                .playlist-card-container {
-                    display: flex;
-                    gap: 1rem;
-                    overflow-x: auto;
-                    padding-bottom: 1rem;
-                    margin-top: 1rem;
-                }
                 .playlist-item-card {
                     background-color: #eef2ff;
                     border-radius: 0.5rem;
@@ -63,6 +35,13 @@ class PlaylistView extends HTMLElement {
                     transform: translateY(-2px);
                     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
                 }
+                .playlist-card-container {
+                    display: flex;
+                    gap: 1rem;
+                    overflow-x: auto;
+                    padding-bottom: 1rem;
+                    margin-top: 1rem;
+                }
                 .no-playlists-message {
                     text-align: center;
                     font-style: italic;
@@ -72,14 +51,13 @@ class PlaylistView extends HTMLElement {
             </style>
             <div class="playlist-manager-container">
                 <h3>Saved Playlists</h3>
-                <div id="saved-playlists-container" class="playlist-card-container"></div>
-                <p id="no-playlists-message" class="hidden">I have not created any playlist yet. Start creating a new playlist.</p>
+                <div id="content-container"></div>
             </div>
         `;
     }
 
     setupEventListeners() {
-        this.shadowRoot.querySelector('#saved-playlists-container').addEventListener('click', async (event) => {
+        this.shadowRoot.querySelector('#content-container').addEventListener('click', async (event) => {
             if (event.target.closest('.playlist-item-card')) {
                 const playlistId = event.target.closest('.playlist-item-card').dataset.id;
                 const playlist = await this.db.getPlaylistById(playlistId);
@@ -90,14 +68,17 @@ class PlaylistView extends HTMLElement {
 
     async loadPlaylists() {
         const playlists = await this.db.getPlaylists();
-        const container = this.shadowRoot.querySelector('#saved-playlists-container');
-        const noPlaylistsMessage = this.shadowRoot.querySelector('#no-playlists-message');
+        const container = this.shadowRoot.querySelector('#content-container');
         
-        container.innerHTML = '';
+        container.innerHTML = ''; // Clear existing content
+
         if (playlists.length === 0) {
-            noPlaylistsMessage.classList.remove('hidden');
+            container.innerHTML = `
+                <p class="no-playlists-message">You have not created any playlists yet. Start by creating a new playlist.</p>
+            `;
         } else {
-            noPlaylistsMessage.classList.add('hidden');
+            const playlistCardContainer = document.createElement('div');
+            playlistCardContainer.className = 'playlist-card-container';
             playlists.forEach(p => {
                 const card = document.createElement('div');
                 card.className = 'playlist-item-card';
@@ -106,9 +87,10 @@ class PlaylistView extends HTMLElement {
                     <h4>${p.name}</h4>
                     <p>${new Date(p.timestamp).toLocaleDateString()}</p>
                 `;
-                container.appendChild(card);
+                playlistCardContainer.appendChild(card);
             });
+            container.appendChild(playlistCardContainer);
         }
     }
 }
-customElements.define('playlist-view', PlaylistView);
+customElements.define('playlists-view', PlaylistsViewComponent);

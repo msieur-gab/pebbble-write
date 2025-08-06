@@ -1,5 +1,6 @@
 // utils/log.js
-// This utility module provides a centralized logging function to manage debug output in a consistent format.
+
+import { eventBus } from '../services/eventBus.js';
 
 export function log(message, type = 'info') {
     const timestamp = new Date().toLocaleTimeString();
@@ -19,4 +20,9 @@ export function log(message, type = 'info') {
     logItem.innerHTML = `<span class="timestamp">${timestamp}</span><span>${emoji} ${message}</span>`;
     logOutput.appendChild(logItem);
     logOutput.scrollTop = logOutput.scrollHeight;
+
+    // Publish event to the toast component for user-facing notifications
+    if (type === 'success' || type === 'error' || type === 'warning') {
+        eventBus.publish('show-toast', { message: message, type: type });
+    }
 }

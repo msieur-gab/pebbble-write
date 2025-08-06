@@ -7,12 +7,14 @@ import { EncryptionService } from '../services/encryptionService.js';
 import { StorageService } from '../services/storageService.js';
 import { MessageDb } from '../services/messageDb.js';
 import { NFCService } from '../services/nfcService.js';
+import { stateManager } from '../services/stateManager.js';
 
 import './apiSetupForm.js';
-import './fabComponent.js';
 import './serialModal.js';
-import './playlistView.js';
-import './playlistCreationView.js';
+import './playlistsView.js';
+import './playlistManagement.js';
+import './audioManagement.js';
+import './homeView.js';
 
 class WriterApp extends HTMLElement {
     constructor() {
@@ -28,6 +30,7 @@ class WriterApp extends HTMLElement {
         this.render();
         this.loadState();
         this.setupEventListeners();
+        this.setupAppStateSubscription();
     }
     
     render() {
@@ -64,7 +67,7 @@ class WriterApp extends HTMLElement {
                 .log-container { margin-top: 2rem; background-color: var(--log-bg); color: var(--log-text); border-radius: 0.5rem; padding: 1rem; max-height: 10rem; overflow-y: auto; }
                 .process-status { margin-top: 1rem; padding: 1rem; border-radius: 0.5rem; background-color: var(--info-bg); color: var(--info-text); text-align: center; }
             </style>
-            <div id="apiSetupForm">
+            <div id="apiSetupForm" class="hidden">
                 <div class="status-box warning">
                     <p><span class="font-bold">Note:</span> This app writes messages to a simulated NFC tag. A real app would use the Web NFC API.</p>
                 </div>
@@ -77,8 +80,10 @@ class WriterApp extends HTMLElement {
             </div>
             
             <div id="mainApp" class="hidden">
-                <playlist-view class="hidden"></playlist-view>
-                <playlist-creation-view class="hidden"></playlist-creation-view>
+                <home-view class="hidden"></home-view>
+                <playlists-view class="hidden"></playlists-view>
+                <playlist-management class="hidden"></playlist-management>
+                <audio-management class="hidden"></audio-management>
             </div>
 
             <div id="writerResults" class="hidden">
@@ -88,11 +93,10 @@ class WriterApp extends HTMLElement {
                     <pre id="nfc-url-display" class="flex-grow"></pre>
                     <button id="write-nfc-btn" class="btn btn-primary">Write to NFC Tag</button>
                 </div>
-                <button id="backToPlaylistsBtn" class="btn btn-secondary">Back to Playlists</button>
+                <button id="backToPlaylistsBtn" class="btn btn-secondary">Back to Home Screen</button>
             </div>
             
             <div id="processStatus" class="process-status hidden"></div>
-            <fab-component class="hidden"></fab-component>
             <serial-modal class="hidden"></serial-modal>
         `;
     }
@@ -105,56 +109,57 @@ class WriterApp extends HTMLElement {
             this.storageService = new StorageService(apiKey, secret);
             this.shadowRoot.querySelector('#pinata-api-key').value = apiKey;
             this.shadowRoot.querySelector('#pinata-secret').value = secret;
-            this.showStep('playlistView');
+            stateManager.setAppView('homeView');
         } else {
-            this.showStep('apiSetupForm');
+            stateManager.setAppView('apiSetupForm');
         }
     }
     
-    showStep(stepId) {
-        const sections = ['apiSetupForm', 'writerResults'];
-        sections.forEach(id => {
-            const el = this.shadowRoot.querySelector(`#${id}`);
-            if (el) el.classList.add('hidden');
-        });
-        
+    _updateView(viewName) {
+        const views = {
+            'apiSetupForm': this.shadowRoot.querySelector('#apiSetupForm'),
+            'homeView': this.shadowRoot.querySelector('home-view'),
+            'playlistsView': this.shadowRoot.querySelector('playlists-view'),
+            'playlistManagement': this.shadowRoot.querySelector('playlist-management'),
+            'audioManagement': this.shadowRoot.querySelector('audio-management'),
+            'writerResults': this.shadowRoot.querySelector('#writerResults'),
+            'processing': this.shadowRoot.querySelector('#processStatus'),
+            'serialModal': this.shadowRoot.querySelector('serial-modal')
+        };
         const mainAppContainer = this.shadowRoot.querySelector('#mainApp');
-        const playlistView = this.shadowRoot.querySelector('playlist-view');
-        const playlistCreationView = this.shadowRoot.querySelector('playlist-creation-view');
-        const fab = this.shadowRoot.querySelector('fab-component');
         const serialModal = this.shadowRoot.querySelector('serial-modal');
-        const processStatus = this.shadowRoot.querySelector('#processStatus');
 
-        mainAppContainer.classList.add('hidden');
-        playlistView.classList.add('hidden');
-        playlistCreationView.classList.add('hidden');
-        fab.classList.add('hidden');
-        serialModal.classList.add('hidden');
-        processStatus.classList.add('hidden');
+        Object.values(views).forEach(view => {
+            if (view) view.classList.add('hidden');
+        });
+        if (mainAppContainer) mainAppContainer.classList.add('hidden');
         
-        switch(stepId) {
-            case 'apiSetupForm':
-                this.shadowRoot.querySelector(`#${stepId}`).classList.remove('hidden');
-                break;
-            case 'playlistView':
+        if (serialModal) serialModal.shadowRoot.querySelector('modal-component').close();
+
+        if (views[viewName]) {
+            views[viewName].classList.remove('hidden');
+
+            if (['homeView', 'playlistsView', 'playlistManagement', 'audioManagement'].includes(viewName)) {
                 mainAppContainer.classList.remove('hidden');
-                playlistView.classList.remove('hidden');
-                fab.classList.remove('hidden');
-                break;
-            case 'playlistCreationView':
-                mainAppContainer.classList.remove('hidden');
-                playlistCreationView.classList.remove('hidden');
-                break;
-            case 'writerResults':
-                this.shadowRoot.querySelector(`#${stepId}`).classList.remove('hidden');
-                break;
-            case 'serialModal':
-                serialModal.classList.remove('hidden');
-                break;
-            case 'processing':
-                processStatus.classList.remove('hidden');
-                break;
+            }
+            
+            if (viewName === 'serialModal') {
+                serialModal.shadowRoot.querySelector('modal-component').open();
+            }
         }
+
+        if (viewName === 'playlistsView') {
+            const playlistsView = this.shadowRoot.querySelector('playlists-view');
+            if (playlistsView) {
+                playlistsView.loadPlaylists();
+            }
+        }
+    }
+
+    setupAppStateSubscription() {
+        eventBus.subscribe('app-view-changed', (newView) => {
+            this._updateView(newView);
+        });
     }
 
     setupEventListeners() {
@@ -165,45 +170,50 @@ class WriterApp extends HTMLElement {
                 this.storageService = new StorageService(apiKey, secret);
                 await this.db.saveSetting('apiKey', apiKey);
                 await this.db.saveSetting('secret', secret);
-                this.showStep('playlistView');
+                stateManager.setAppView('homeView');
                 log('Pinata credentials set. Ready to create your playlist.', 'success');
             } else {
                 log('Please fill in all fields.', 'warning');
             }
         });
 
-        eventBus.subscribe('fab-clicked', () => {
+        eventBus.subscribe('new-playlist-requested', () => {
             this.currentPlaylistId = null;
-            this.showStep('playlistCreationView');
-            this.shadowRoot.querySelector('playlist-creation-view').setPlaylistData(null);
+            stateManager.setAppView('playlistManagement');
+            this.shadowRoot.querySelector('playlist-management').setPlaylistData(null);
             log('Starting a new playlist.', 'info');
+        });
+        
+        eventBus.subscribe('new-recording-requested', () => {
+            stateManager.setAppView('audioManagement');
+            log('Starting a new recording.', 'info');
         });
         
         eventBus.subscribe('open-playlist', (data) => {
             this.currentPlaylistId = data.playlist.id;
-            this.showStep('playlistCreationView');
-            this.shadowRoot.querySelector('playlist-creation-view').setPlaylistData(data.playlist);
+            stateManager.setAppView('playlistManagement');
+            this.shadowRoot.querySelector('playlist-management').setPlaylistData(data.playlist);
             log(`Opening playlist "${data.playlist.name}".`, 'info');
         });
 
         eventBus.subscribe('save-playlist-requested', (data) => this.savePlaylist(data));
-        eventBus.subscribe('back-to-playlists', () => this.showStep('playlistView'));
-        eventBus.subscribe('finalize-playlist-requested', () => this.showStep('serialModal'));
-        eventBus.subscribe('modal-close', () => this.showStep('playlistCreationView'));
+        eventBus.subscribe('back-to-home', () => stateManager.setAppView('homeView'));
+        eventBus.subscribe('finalize-playlist-requested', () => {
+            stateManager.setAppView('serialModal');
+        });
+        eventBus.subscribe('modal-close', () => {
+            stateManager.setAppView('playlistManagement')
+        });
         eventBus.subscribe('scan-serial-request', () => this.handleScanRequest());
         eventBus.subscribe('manual-serial-set', (serial) => this.handleManualSerialSet(serial));
         
-        this.shadowRoot.querySelector('#write-nfc-btn').addEventListener('click', () => this.writeNfcUrl());
-        this.shadowRoot.querySelector('#backToPlaylistsBtn').addEventListener('click', () => this.showStep('playlistView'));
-    }
+        this.shadowRoot.querySelector('#write-nfc-btn').addEventListener('click', () => {
+            const nfcUrl = this.shadowRoot.querySelector('#nfc-url-display').textContent;
+            this.writeNfcUrl(nfcUrl);
+        });
 
-    showSerialModal() {
-        this.shadowRoot.querySelector('serial-modal').style.display = 'flex';
-    }
-    
-    hideSerialModal() {
-        this.shadowRoot.querySelector('serial-modal').style.display = 'none';
-        this.shadowRoot.querySelector('serial-modal').shadowRoot.querySelector('#modal-manual-serial-input').value = '';
+        // The button on the writerResults view should now also go back to the home screen
+        this.shadowRoot.querySelector('#backToPlaylistsBtn').addEventListener('click', () => stateManager.setAppView('homeView'));
     }
     
     async savePlaylist(data) {
@@ -223,13 +233,18 @@ class WriterApp extends HTMLElement {
             log(`New playlist "${data.name}" saved.`, 'success');
         }
 
-        this.showStep('playlistView');
-        this.shadowRoot.querySelector('playlist-view').loadPlaylists();
+        stateManager.setAppView('homeView');
+        const homeView = this.shadowRoot.querySelector('home-view');
+        if (homeView) {
+            const playlistsView = homeView.shadowRoot.querySelector('playlists-view');
+            if (playlistsView) {
+                playlistsView.loadPlaylists();
+            }
+        }
         log('Playlist successfully saved to history.', 'success');
     }
     
     async handleScanRequest() {
-        this.hideSerialModal();
         try {
             await this.nfcService.startReader((serial) => {
                 if (serial) {
@@ -239,15 +254,15 @@ class WriterApp extends HTMLElement {
                 } else {
                     log('No serial number found on the tag.', 'warning');
                     this.shadowRoot.querySelector('#processStatus').textContent = 'Could not read serial from the tag. Please try again.';
-                    this.showStep('processing');
-                    setTimeout(() => this.showStep('serialModal'), 3000);
+                    stateManager.setAppView('processing');
+                    setTimeout(() => stateManager.setAppView('serialModal'), 3000);
                 }
             });
         } catch (e) { 
             log(`NFC scan failed: ${e.message}`, 'error');
-            this.showStep('processing');
             this.shadowRoot.querySelector('#processStatus').textContent = 'NFC reader failed to start. Ensure your device supports it and try again.';
-            setTimeout(() => this.showStep('serialModal'), 5000);
+            stateManager.setAppView('processing');
+            setTimeout(() => stateManager.setAppView('serialModal'), 5000);
         }
     }
     
@@ -258,23 +273,22 @@ class WriterApp extends HTMLElement {
     
     async finalizeAndWritePlaylist() {
         const processStatusEl = this.shadowRoot.querySelector('#processStatus');
-        this.showStep('processing');
+        stateManager.setAppView('processing');
         
-        const currentPlaylistView = this.shadowRoot.querySelector('playlist-creation-view');
-        const playlistClips = currentPlaylistView.currentPlaylistClips;
+        const playlistManagement = this.shadowRoot.querySelector('playlist-management');
+        const playlistClips = playlistManagement.currentPlaylistClips;
         
         if (playlistClips.length === 0) {
             log('No clips in the playlist to finalize.', 'warning');
             processStatusEl.textContent = 'Cannot finalize an empty playlist. Please add some audio clips.';
-            setTimeout(() => this.showStep('playlistCreationView'), 3000);
+            setTimeout(() => stateManager.setAppView('playlistManagement'), 3000);
             return;
         }
 
-        processStatusEl.textContent = `Starting finalization for playlist "${currentPlaylistView.shadowRoot.querySelector('#playlistTitle').value}".`;
+        processStatusEl.textContent = `Starting finalization for playlist "${playlistManagement.shadowRoot.querySelector('#playlistTitle').value}".`;
         
-        this.hideSerialModal();
         const fabBtn = this.shadowRoot.querySelector('fab-component');
-        if (fabBtn) { fabBtn.disabled = true; }
+        if (fabBtn) { fabBtn.shadowRoot.querySelector('#main-fab').disabled = true; }
 
         const playlistManifest = { version: 'playlist-v1', messages: [] };
         
@@ -299,8 +313,8 @@ class WriterApp extends HTMLElement {
             } catch (err) {
                 log(`Failed to process message "${message.title}": ${err.message}`, 'error');
                 processStatusEl.textContent = `Failed to upload clip "${message.title}". Please check your internet connection and Pinata credentials.`;
-                setTimeout(() => this.showStep('playlistCreationView'), 5000);
-                if (fabBtn) { fabBtn.disabled = false; }
+                setTimeout(() => stateManager.setAppView('playlistManagement'), 5000);
+                if (fabBtn) { fabBtn.shadowRoot.querySelector('#main-fab').disabled = false; }
                 return;
             }
         }
@@ -316,28 +330,27 @@ class WriterApp extends HTMLElement {
                     await this.db.saveFinalizedPlaylist(playlist.name, finalManifestHash, this.currentTagSerial, playlist.audioClipIds);
                     log(`Playlist "${playlist.name}" finalized and saved.`, 'success');
                 } else {
-                    // Handle case where playlist might not be saved yet
-                    const playlistName = currentPlaylistView.shadowRoot.querySelector('#playlistTitle').value;
-                    const playlistAudioClipIds = currentPlaylistView.currentPlaylistClips.map(c => c.id);
+                    const playlistName = playlistManagement.shadowRoot.querySelector('#playlistTitle').value;
+                    const playlistAudioClipIds = playlistManagement.currentPlaylistClips.map(c => c.id);
                     await this.db.saveFinalizedPlaylist(playlistName, finalManifestHash, this.currentTagSerial, playlistAudioClipIds);
                     log(`New playlist "${playlistName}" finalized and saved.`, 'success');
                 }
     
-                this.showStep('writerResults');
+                stateManager.setAppView('writerResults');
                 this.shadowRoot.querySelector('#nfc-url-display').textContent = finalNfcUrl;
                 log('Playlist successfully uploaded and URL generated!', 'success');
             } catch (err) {
                 log(`Failed to upload final playlist manifest: ${err.message}`, 'error');
                 processStatusEl.textContent = 'Failed to create the final playlist. Please try again.';
-                setTimeout(() => this.showStep('playlistCreationView'), 5000);
+                setTimeout(() => stateManager.setAppView('playlistManagement'), 5000);
             }
         } else {
             log('No clips were successfully processed, cannot finalize playlist.', 'error');
             processStatusEl.textContent = 'An error occurred during file processing. No clips were finalized.';
-            setTimeout(() => this.showStep('playlistCreationView'), 5000);
+            setTimeout(() => stateManager.setAppView('playlistManagement'), 5000);
         }
 
-        if (fabBtn) { fabBtn.disabled = false; }
+        if (fabBtn) { fabBtn.shadowRoot.querySelector('#main-fab').disabled = false; }
     }
     
     async writeNfcUrl(url) {
@@ -358,7 +371,6 @@ class WriterApp extends HTMLElement {
                     log(`SECURITY ERROR: Scanned serial "${scannedSerial}" does not match original serial "${this.currentTagSerial}".`, 'error');
                     writeNfcBtn.textContent = 'Serial Mismatch - Try Again';
                     writeNfcBtn.disabled = false;
-                    // Provide a user-friendly message
                     this.shadowRoot.querySelector('#nfc-url-display').textContent = 'SECURITY ERROR: The Pebbble you just tapped is not the same one you scanned initially. Please tap the correct Pebbble.';
                 }
             });
