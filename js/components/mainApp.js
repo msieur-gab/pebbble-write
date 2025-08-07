@@ -1,24 +1,25 @@
-// js/components/mainApp.js
+// js/components/mainApp.js - Updated with Audio Library
 
 import { log } from '../utils/log.js';
 import { eventBus } from '../services/eventBus.js';
 import { appState } from '../services/appState.js';
 import { MessageDb } from '../services/messageDb.js';
 import { StorageService } from '../services/storageService.js';
-import { audioPlayerService } from '../services/audioPlayerService.js'; // Initialize audio service
+import { audioPlayerService } from '../services/audioPlayerService.js';
 
 // Import all components
 import './apiSetupForm.js';
 import './homeView.js';
 import './playlistsView.js'; 
 import './playlistCreator.js';      
-import './audioCreator.js';         
+import './audioCreator.js';
+import './audioLibrary.js';          // NEW: Audio Library component
 import './playlistFinalization.js';  
 import './writerResults.js';         
 import './serialModal.js';           
 import './ui/toast.js';
 import './ui/fab.js';
-import './ui/audioPreview.js';  // Import the reusable audio preview component
+import './ui/audioPreview.js';
 
 class MainApp extends HTMLElement {
     constructor() {
@@ -53,6 +54,7 @@ class MainApp extends HTMLElement {
                 <home-view class="view hidden" id="homeView"></home-view>
                 <playlist-creator class="view hidden" id="playlistCreator"></playlist-creator>
                 <audio-creator class="view hidden" id="audioCreator"></audio-creator>
+                <audio-library class="view hidden" id="audioLibrary"></audio-library>
                 <playlist-finalization class="view hidden" id="playlistFinalization"></playlist-finalization>
             </div>
             
@@ -76,6 +78,11 @@ class MainApp extends HTMLElement {
         
         eventBus.subscribe('new-recording-requested', () => {
             appState.navigateTo('audioCreator');
+        });
+
+        // NEW: Audio library navigation
+        eventBus.subscribe('open-audio-library', () => {
+            appState.navigateTo('audioLibrary');
         });
         
         eventBus.subscribe('back-to-home', () => {
@@ -171,6 +178,7 @@ class MainApp extends HTMLElement {
             case 'homeView':
             case 'playlistCreator':
             case 'audioCreator':
+            case 'audioLibrary':           // NEW: Handle audio library view
             case 'playlistFinalization':
                 mainContainer.classList.remove('hidden');
                 targetView = this.shadowRoot.querySelector(`#${viewName}`);
@@ -207,6 +215,12 @@ class MainApp extends HTMLElement {
                 } else {
                     log('Starting a new playlist.', 'info');
                 }
+                break;
+
+            // NEW: Refresh audio library when navigating to it
+            case 'audioLibrary':
+                viewElement.refresh();
+                log('Opened audio library', 'info');
                 break;
         }
     }

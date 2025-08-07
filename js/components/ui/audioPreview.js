@@ -1,7 +1,8 @@
 // js/components/ui/audioPreview.js
-// Reusable audio preview component with play button, title, and duration
+// Bulletproof audio preview with hybrid state management
 
 import { eventBus } from '../../services/eventBus.js';
+import { audioPlayerService } from '../../services/audioPlayerService.js';
 
 class AudioPreview extends HTMLElement {
     static get observedAttributes() {
@@ -14,6 +15,7 @@ class AudioPreview extends HTMLElement {
         this.audioBlob = null;
         this.render();
         this.setupEventListeners();
+        this.startStateSync();
     }
 
     attributeChangedCallback() {
@@ -24,7 +26,7 @@ class AudioPreview extends HTMLElement {
         const clipId = this.getAttribute('clip-id') || '';
         const title = this.getAttribute('title') || 'Audio Preview';
         const duration = this.getAttribute('duration') || '0:00';
-        const layout = this.getAttribute('layout') || 'full'; // 'full', 'compact', 'minimal', 'playlist', 'library'
+        const layout = this.getAttribute('layout') || 'full';
 
         let template = '';
 
@@ -213,6 +215,9 @@ class AudioPreview extends HTMLElement {
                         background: var(--button-hover);
                         transform: scale(1.05);
                     }
+                    .play-btn.playing {
+                        background: var(--accent-color);
+                    }
                     .audio-info {
                         flex: 1;
                         min-width: 0;
@@ -264,6 +269,9 @@ class AudioPreview extends HTMLElement {
                     .play-btn:hover {
                         background: var(--button-hover);
                         transform: scale(1.05);
+                    }
+                    .play-btn.playing {
+                        background: var(--accent-color);
                     }
                     .audio-duration {
                         font-size: 0.75rem;
@@ -352,43 +360,31 @@ class AudioPreview extends HTMLElement {
             }
         });
 
-        // Listen for audio service events to sync button states
-        eventBus.subscribe('audio-started', (data) => {
+        // Listen for state changes from the audio service
+        eventBus.subscribe('audio-state-changed', (data) => {
             const myClipId = this.getAttribute('clip-id');
-            const playBtn = this.shadowRoot.querySelector('#play-btn');
             
-            if (playBtn) {
-                if (String(data.id) === String(myClipId)) {
-                    // This component's audio started playing
-                    playBtn.textContent = '⏸';
-                    playBtn.classList.add('playing');
-                } else {
-                    // Another component's audio started playing - reset this one
-                    playBtn.textContent = '▶';
-                    playBtn.classList.remove('playing');
+            if (String(data.id) === String(myClipId)) {
+                // This is about our audio clip
+                this.updatePlayState(data.isPlaying);
+            }
+        });
+    }
+
+    // Periodically sync with actual audio service state (backup mechanism)
+    startStateSync() {
+        setInterval(() => {
+            const myClipId = this.getAttribute('clip-id');
+            if (myClipId) {
+                const actuallyPlaying = audioPlayerService.isPlaying(myClipId);
+                const buttonShowsPlaying = this.isButtonInPlayingState();
+                
+                // Fix any state mismatch
+                if (actuallyPlaying !== buttonShowsPlaying) {
+                    this.updatePlayState(actuallyPlaying);
                 }
             }
-        });
-
-        eventBus.subscribe('audio-paused', (data) => {
-            const myClipId = this.getAttribute('clip-id');
-            const playBtn = this.shadowRoot.querySelector('#play-btn');
-            
-            if (String(data.id) === String(myClipId) && playBtn) {
-                playBtn.textContent = '▶';
-                playBtn.classList.remove('playing');
-            }
-        });
-
-        eventBus.subscribe('audio-ended', (data) => {
-            const myClipId = this.getAttribute('clip-id');
-            const playBtn = this.shadowRoot.querySelector('#play-btn');
-            
-            if (String(data.id) === String(myClipId) && playBtn) {
-                playBtn.textContent = '▶';
-                playBtn.classList.remove('playing');
-            }
-        });
+        }, 1000); // Check every second
     }
 
     togglePlayback() {
@@ -397,29 +393,43 @@ class AudioPreview extends HTMLElement {
             return;
         }
 
-        const playBtn = this.shadowRoot.querySelector('#play-btn');
         const clipId = this.getAttribute('clip-id');
+        const isCurrentlyPlaying = this.isButtonInPlayingState();
+        
+        if (isCurrentlyPlaying) {
+            // Pause this track
+            eventBus.publish('pause-audio', { id: clipId });
+        } else {
+            // Play this track
+            eventBus.publish('play-audio', {
+                id: clipId,
+                audioBlob: this.audioBlob
+            });
+        }
+    }
 
-        // Update this button immediately for responsive feel
-        if (playBtn.textContent === '▶') {
+    // Check if button is currently showing playing state
+    isButtonInPlayingState() {
+        const playBtn = this.shadowRoot.querySelector('#play-btn');
+        return playBtn && playBtn.classList.contains('playing');
+    }
+
+    // Update the visual state of the play button
+    updatePlayState(isPlaying) {
+        const playBtn = this.shadowRoot.querySelector('#play-btn');
+        if (!playBtn) return;
+
+        if (isPlaying) {
             playBtn.textContent = '⏸';
             playBtn.classList.add('playing');
         } else {
             playBtn.textContent = '▶';
             playBtn.classList.remove('playing');
         }
-
-        // Emit play event - events will handle cross-component synchronization
-        eventBus.publish('play-audio', {
-            id: clipId,
-            audioBlob: this.audioBlob
-        });
     }
 
     handleRemove() {
         const clipId = this.getAttribute('clip-id');
-        
-        // Emit remove event (for playlist - removes from playlist but keeps file)
         this.dispatchEvent(new CustomEvent('clip-remove', {
             detail: { clipId: clipId },
             bubbles: true
@@ -428,8 +438,6 @@ class AudioPreview extends HTMLElement {
 
     handleDelete() {
         const clipId = this.getAttribute('clip-id');
-        
-        // Emit delete event (for library - permanently deletes file)
         this.dispatchEvent(new CustomEvent('clip-delete', {
             detail: { clipId: clipId },
             bubbles: true
@@ -443,11 +451,7 @@ class AudioPreview extends HTMLElement {
 
     // Public method to reset play button
     resetPlayButton() {
-        const playBtn = this.shadowRoot.querySelector('#play-btn');
-        if (playBtn) {
-            playBtn.textContent = '▶';
-            playBtn.classList.remove('playing');
-        }
+        this.updatePlayState(false);
     }
 
     // Method to format duration

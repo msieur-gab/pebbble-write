@@ -1,58 +1,76 @@
 // js/services/audioPlayerService.js
-// This new service centrally manages audio playback to prevent multiple tracks from playing.
+// Simple, bulletproof audio service
 
 import { eventBus } from './eventBus.js';
 import { log } from '../utils/log.js';
 
 class AudioPlayerService {
     constructor() {
-        // Create a single, hidden audio element to manage all playback
         this.audioElement = new Audio();
         this.currentUrl = null;
         this.currentPlayingId = null;
-
+        
         this.setupEventListeners();
+        this.startStateMonitor();
     }
 
     setupEventListeners() {
+        // Handle audio ending naturally
         this.audioElement.addEventListener('ended', () => {
             log('Audio playback ended.', 'info');
+            const endedId = this.currentPlayingId;
             this.currentPlayingId = null;
+            
+            if (endedId) {
+                eventBus.publish('audio-state-changed', { 
+                    id: endedId, 
+                    isPlaying: false 
+                });
+            }
         });
 
-        // Listen for requests to play a new audio track
+        // Handle play requests
         eventBus.subscribe('play-audio', (data) => {
             this.play(data.id, data.audioBlob);
         });
 
-        // Listen for requests to pause audio playback
+        // Handle pause requests  
         eventBus.subscribe('pause-audio', (data) => {
             if (this.currentPlayingId === data.id) {
                 this.pause();
             }
         });
 
-        // Listen for requests to stop audio playback
+        // Handle stop requests
         eventBus.subscribe('stop-audio', () => {
             this.stop();
         });
 
-        // Stop audio on navigation events
-        eventBus.subscribe('back-to-home', () => {
-            this.stop();
-        });
-        
-        eventBus.subscribe('new-playlist-requested', () => {
-            this.stop();
-        });
-        
-        eventBus.subscribe('new-recording-requested', () => {
-            this.stop();
-        });
-        
-        eventBus.subscribe('open-playlist', () => {
-            this.stop();
-        });
+        // Stop on navigation
+        eventBus.subscribe('back-to-home', () => this.stop());
+        eventBus.subscribe('new-playlist-requested', () => this.stop());
+        eventBus.subscribe('new-recording-requested', () => this.stop());
+        eventBus.subscribe('open-playlist', () => this.stop());
+    }
+
+    // Monitor actual audio state and sync components
+    startStateMonitor() {
+        setInterval(() => {
+            if (this.currentPlayingId) {
+                const actuallyPlaying = !this.audioElement.paused && !this.audioElement.ended;
+                
+                // If we think something is playing but it's not, fix it
+                if (!actuallyPlaying) {
+                    const stoppedId = this.currentPlayingId;
+                    this.currentPlayingId = null;
+                    
+                    eventBus.publish('audio-state-changed', { 
+                        id: stoppedId, 
+                        isPlaying: false 
+                    });
+                }
+            }
+        }, 500); // Check twice per second
     }
 
     play(id, audioBlob) {
@@ -61,61 +79,90 @@ class AudioPlayerService {
             return;
         }
 
-        // If the same track is already playing, just pause it
+        // If same track is playing, pause it
         if (this.currentPlayingId === id && !this.audioElement.paused) {
             this.pause();
             return;
         }
-        
-        // If a different track is playing, pause it first
-        if (!this.audioElement.paused) {
-            this.pause();
+
+        // Stop any currently playing track
+        const previousId = this.currentPlayingId;
+        if (previousId && previousId !== id) {
+            this.audioElement.pause();
+            eventBus.publish('audio-state-changed', { 
+                id: previousId, 
+                isPlaying: false 
+            });
         }
 
-        // If a different audio is loaded, revoke the old URL and create a new one
-        if (this.currentUrl && this.currentPlayingId !== id) {
+        // Clean up old URL
+        if (this.currentUrl) {
             URL.revokeObjectURL(this.currentUrl);
         }
 
-        // Load the new audio track
+        // Setup new audio
         this.currentUrl = URL.createObjectURL(audioBlob);
         this.audioElement.src = this.currentUrl;
         this.currentPlayingId = id;
 
-        // Play the new track
-        this.audioElement.play().then(() => {
-            log(`Started playing audio ID: ${id}`, 'info');
-        }).catch(error => {
-            log(`Failed to play audio: ${error.message}`, 'error');
-        });
+        // Play it
+        this.audioElement.play()
+            .then(() => {
+                log(`Started playing audio ID: ${id}`, 'info');
+                eventBus.publish('audio-state-changed', { 
+                    id: id, 
+                    isPlaying: true 
+                });
+            })
+            .catch(error => {
+                log(`Failed to play audio: ${error.message}`, 'error');
+                this.currentPlayingId = null;
+                eventBus.publish('audio-state-changed', { 
+                    id: id, 
+                    isPlaying: false 
+                });
+            });
     }
 
     pause() {
-        if (!this.audioElement.paused) {
+        if (this.currentPlayingId && !this.audioElement.paused) {
+            const pausedId = this.currentPlayingId;
             this.audioElement.pause();
+            this.currentPlayingId = null;
+            
             log('Audio playback paused.', 'info');
+            eventBus.publish('audio-state-changed', { 
+                id: pausedId, 
+                isPlaying: false 
+            });
         }
     }
 
     stop() {
-        if (!this.audioElement.paused) {
+        if (this.currentPlayingId) {
+            const stoppedId = this.currentPlayingId;
             this.audioElement.pause();
             this.audioElement.currentTime = 0;
+            this.currentPlayingId = null;
+            
+            eventBus.publish('audio-state-changed', { 
+                id: stoppedId, 
+                isPlaying: false 
+            });
         }
-        
-        const stoppedId = this.currentPlayingId;
-        this.currentPlayingId = null;
-        
-        if (stoppedId) {
-            eventBus.publish('audio-ended', { id: stoppedId });
-        }
-        
         log('Audio playback stopped.', 'info');
     }
 
-    // Public method to check if a specific track is playing
+    // Public method to check if specific track is playing
     isPlaying(id) {
-        return this.currentPlayingId === id && !this.audioElement.paused;
+        return this.currentPlayingId === id && 
+               !this.audioElement.paused && 
+               !this.audioElement.ended;
+    }
+
+    // Public method to get current playing ID
+    getCurrentlyPlaying() {
+        return this.currentPlayingId;
     }
 }
 
