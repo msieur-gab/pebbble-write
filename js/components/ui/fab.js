@@ -1,7 +1,8 @@
-// components/ui/fab.js
+// js/components/ui/fab.js
+// FIXED: Back to original logic, just add minimal appState integration
 
 import { eventBus } from '../../services/eventBus.js';
-import { stateManager } from '../../services/stateManager.js';
+import { appState } from '../../services/appState.js'; // NEW: Only addition
 
 class FabComponent extends HTMLElement {
     constructor() {
@@ -10,9 +11,10 @@ class FabComponent extends HTMLElement {
         this.isMenuOpen = false;
         this.render();
         this.setupEventListeners();
-        this.setupStateSubscription();
+        this.setupAppStateSubscription(); // NEW: Only new method
     }
-    
+
+    // EXACT copy from original fab.js
     render() {
         this.shadowRoot.innerHTML = `
             <style>
@@ -65,6 +67,8 @@ class FabComponent extends HTMLElement {
                     transform: translateX(20px);
                     transition: all 0.3s ease;
                     pointer-events: none;
+                    border: none;
+                    cursor: pointer;
                 }
                 .menu-option.visible {
                     display: block;
@@ -77,13 +81,14 @@ class FabComponent extends HTMLElement {
                 }
             </style>
             <div class="fab-menu-container" id="fab-menu-container">
-                <button class="btn menu-option" id="new-recording-btn">New Recording</button>
-                <button class="btn menu-option" id="new-playlist-btn">New Playlist</button>
+                <button class="menu-option" id="new-recording-btn">New Recording</button>
+                <button class="menu-option" id="new-playlist-btn">New Playlist</button>
                 <button class="fab-btn main-fab" id="main-fab">+</button>
             </div>
         `;
     }
     
+    // EXACT copy from original fab.js
     setupEventListeners() {
         const mainFab = this.shadowRoot.querySelector('#main-fab');
         const newRecordingBtn = this.shadowRoot.querySelector('#new-recording-btn');
@@ -104,8 +109,9 @@ class FabComponent extends HTMLElement {
         });
     }
 
-    setupStateSubscription() {
-        eventBus.subscribe('app-view-changed', (newView) => {
+    // NEW: Only new method - minimal state integration
+    setupAppStateSubscription() {
+        appState.subscribe('currentView', (newView) => {
             const container = this.shadowRoot.querySelector('#fab-menu-container');
             if (newView === 'homeView') {
                 container.style.display = 'flex';
@@ -119,6 +125,7 @@ class FabComponent extends HTMLElement {
         });
     }
 
+    // EXACT copy from original fab.js
     toggleMenu(forceState = null) {
         this.isMenuOpen = forceState !== null ? forceState : !this.isMenuOpen;
         const container = this.shadowRoot.querySelector('#fab-menu-container');

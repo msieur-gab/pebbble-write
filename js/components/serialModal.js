@@ -1,13 +1,15 @@
-// components/serialModal.js
+// js/components/serialModal.js
 
 import { eventBus } from '../services/eventBus.js';
 import { log } from '../utils/log.js';
+import { NFCService } from '../services/nfcService.js';
 import './ui/modal.js';
 
 class SerialModal extends HTMLElement {
     constructor() {
         super();
         this.attachShadow({ mode: 'open' });
+        this.nfcService = new NFCService();
         this.render();
         this.setupEventListeners();
     }
@@ -44,23 +46,58 @@ class SerialModal extends HTMLElement {
     }
     
     setupEventListeners() {
-        // The buttons are in this component's shadow DOM, not the child's.
         this.shadowRoot.querySelector('#modal-cancel-btn').addEventListener('click', () => {
             eventBus.publish('modal-close');
         });
 
         this.shadowRoot.querySelector('#modal-scan-serial-btn').addEventListener('click', () => {
-            eventBus.publish('scan-serial-request');
+            this.handleScanRequest();
         });
 
         this.shadowRoot.querySelector('#modal-manual-serial-btn').addEventListener('click', () => {
             const serial = this.shadowRoot.querySelector('#modal-manual-serial-input').value.trim();
-            if (serial) {
-                eventBus.publish('manual-serial-set', serial);
-            } else {
-                log('Please enter a valid serial number.', 'warning');
-            }
+            this.handleManualSerial(serial);
         });
     }
+
+    async handleScanRequest() {
+        const scanBtn = this.shadowRoot.querySelector('#modal-scan-serial-btn');
+        scanBtn.disabled = true;
+        scanBtn.textContent = 'Tap a Pebbble to scan...';
+
+        try {
+            await this.nfcService.startReader((serial) => {
+                this.nfcService.stopReader();
+                if (serial) {
+                    log(`NFC tag scanned: ${serial}`, 'success');
+                    eventBus.publish('serial-received', serial);
+                } else {
+                    log('No serial number found on the tag.', 'warning');
+                    scanBtn.textContent = 'No serial found - try again';
+                    setTimeout(() => {
+                        scanBtn.disabled = false;
+                        scanBtn.textContent = 'Scan Pebbble (NFC)';
+                    }, 2000);
+                }
+            });
+        } catch (e) {
+            log(`NFC scan failed: ${e.message}`, 'error');
+            scanBtn.textContent = 'Scan failed - try manual entry';
+            setTimeout(() => {
+                scanBtn.disabled = false;
+                scanBtn.textContent = 'Scan Pebbble (NFC)';
+            }, 2000);
+        }
+    }
+
+    handleManualSerial(serial) {
+        if (!serial) {
+            log('Please enter a valid serial number.', 'warning');
+            return;
+        }
+        log(`Manual serial entered: ${serial}`, 'info');
+        eventBus.publish('serial-received', serial);
+    }
 }
+
 customElements.define('serial-modal', SerialModal);

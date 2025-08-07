@@ -12,8 +12,8 @@ import { stateManager } from '../services/stateManager.js';
 import './apiSetupForm.js';
 import './serialModal.js';
 import './playlistsView.js';
-import './playlistManagement.js';
-import './audioManagement.js';
+import './playlistCreator.js';
+import './audioCreator.js';
 import './homeView.js';
 
 class WriterApp extends HTMLElement {

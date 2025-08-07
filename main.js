@@ -6,7 +6,8 @@
 
 import { log } from './js/utils/log.js';
 import { config } from './config.js';
-import './js/components/writerApp.js';
+// import './js/components/writerApp.js';
+import './js/components/mainApp.js';
 import './js/components/ui/toast.js'; // Import the new toast component
 
 document.addEventListener('DOMContentLoaded', () => {

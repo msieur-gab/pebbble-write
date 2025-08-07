@@ -1,15 +1,14 @@
-// components/playlistManager.js
+// js/components/savedPlaylists.js
 
 import { log } from '../utils/log.js';
 import { eventBus } from '../services/eventBus.js';
 import { MessageDb } from '../services/messageDb.js';
 
-class PlaylistManager extends HTMLElement {
+class SavedPlaylists extends HTMLElement {
     constructor() {
         super();
         this.attachShadow({ mode: 'open' });
         this.db = new MessageDb();
-        this.currentPlaylistClips = [];
 
         this.render();
         this.loadPlaylists();
@@ -91,4 +90,4 @@ class PlaylistManager extends HTMLElement {
         }
     }
 }
-customElements.define('playlist-manager', PlaylistManager);
+customElements.define('saved-playlists', SavedPlaylists);
