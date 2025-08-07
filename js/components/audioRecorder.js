@@ -2,6 +2,7 @@
 
 import { log } from '../utils/log.js';
 import { eventBus } from '../services/eventBus.js';
+import './ui/audioPreview.js';
 
 class AudioRecorder extends HTMLElement {
     constructor() {
@@ -15,6 +16,7 @@ class AudioRecorder extends HTMLElement {
         this.audioChunks = [];
         this.recordingInterval = null;
         this.recordingStartTime = null;
+        this.previewId = null;
         
         this.render();
         this.setupEventListeners();
@@ -106,7 +108,13 @@ class AudioRecorder extends HTMLElement {
                 </div>
 
                 <div id="audio-preview-section" class="audio-preview-section hidden">
-                    <audio id="audio-preview" controls style="width: 100%; margin: 1rem 0;"></audio>
+                    <audio-preview 
+                        id="audio-preview"
+                        clip-id="preview"
+                        title="Audio Preview"
+                        duration="0:00"
+                        layout="full">
+                    </audio-preview>
                     <div class="preview-controls">
                         <button id="delete-audio-btn" class="btn btn-secondary">Delete</button>
                         <button id="save-audio-btn" class="btn btn-primary">Save Audio</button>
@@ -197,6 +205,7 @@ class AudioRecorder extends HTMLElement {
             audio.onloadedmetadata = () => {
                 this.currentAudioDuration = audio.duration;
                 URL.revokeObjectURL(audio.src);
+                this.updatePreviewDuration();
             };
             audio.src = URL.createObjectURL(file);
             
@@ -207,15 +216,29 @@ class AudioRecorder extends HTMLElement {
 
     showAudioPreview() {
         const previewSection = this.shadowRoot.querySelector('#audio-preview-section');
-        const audioPreview = this.shadowRoot.querySelector('#audio-preview');
         const timer = this.shadowRoot.querySelector('#recording-timer');
+        const audioPreview = this.shadowRoot.querySelector('#audio-preview');
+        const titleInput = this.shadowRoot.querySelector('#audio-title-input');
         
-        audioPreview.src = URL.createObjectURL(this.currentAudioBlob);
+        this.previewId = `preview-${Date.now()}`;
+        
+        // Update the audio preview component
+        audioPreview.setAttribute('clip-id', this.previewId);
+        audioPreview.setAttribute('title', titleInput.value.trim() || 'Audio Preview');
+        audioPreview.setAttribute('duration', this.formatDuration(this.currentAudioDuration));
+        audioPreview.setAudioBlob(this.currentAudioBlob);
+        
         previewSection.classList.remove('hidden');
         timer.classList.add('hidden');
         
-        // Reset recording button
         this.resetRecordingButton();
+    }
+
+    updatePreviewDuration() {
+        const audioPreview = this.shadowRoot.querySelector('#audio-preview');
+        if (audioPreview) {
+            audioPreview.setAttribute('duration', this.formatDuration(this.currentAudioDuration));
+        }
     }
 
     resetRecordingButton() {
@@ -236,7 +259,6 @@ class AudioRecorder extends HTMLElement {
         
         const title = this.shadowRoot.querySelector('#audio-title-input').value.trim() || 'Untitled Audio';
         
-        // Emit event with audio data
         eventBus.publish('audio-recorded', {
             title: title,
             audioBlob: this.currentAudioBlob,
@@ -248,11 +270,13 @@ class AudioRecorder extends HTMLElement {
     }
 
     resetRecorder() {
-        // Clear audio state
+        // Stop any preview playback
+        eventBus.publish('stop-audio');
+        
         this.currentAudioBlob = null;
         this.currentAudioDuration = 0;
+        this.previewId = null;
         
-        // Reset UI
         this.shadowRoot.querySelector('#audio-title-input').value = '';
         this.shadowRoot.querySelector('#music-file-input').value = '';
         this.shadowRoot.querySelector('#audio-preview-section').classList.add('hidden');
@@ -260,14 +284,21 @@ class AudioRecorder extends HTMLElement {
         
         this.resetRecordingButton();
         
-        // Clear any ongoing recording
         if (this.recordingInterval) {
             clearInterval(this.recordingInterval);
             this.recordingInterval = null;
         }
     }
 
-    // Public methods for parent components
+    formatDuration(seconds) {
+        if (isNaN(seconds) || seconds === Infinity || !seconds) {
+            return '0:00';
+        }
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = Math.floor(seconds % 60);
+        return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+    }
+
     getAudioData() {
         return {
             title: this.shadowRoot.querySelector('#audio-title-input').value.trim(),

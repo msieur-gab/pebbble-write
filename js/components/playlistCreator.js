@@ -3,7 +3,9 @@
 import { log } from '../utils/log.js';
 import { eventBus } from '../services/eventBus.js';
 import { MessageDb } from '../services/messageDb.js';
+import { audioPlayerService } from '../services/audioPlayerService.js';
 import './audioRecorder.js';
+import './ui/audioPreview.js';
 
 class PlaylistCreator extends HTMLElement {
     constructor() {
@@ -50,24 +52,6 @@ class PlaylistCreator extends HTMLElement {
                 .form-input { width: 100%; padding: 0.75rem; border: 2px solid #d1d5db; border-radius: 0.5rem; transition: border-color 0.3s ease; }
                 .form-input:focus { outline: none; border-color: var(--primary-color); }
                 
-                .playlist-clip-item { 
-                    background-color: #ffffff; 
-                    padding: 0.75rem; 
-                    border-radius: 0.5rem; 
-                    display: flex; 
-                    justify-content: space-between; 
-                    align-items: center; 
-                    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); 
-                    margin-bottom: 0.5rem;
-                    border: 1px solid #e5e7eb;
-                }
-                .clip-controls {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                }
-                .clip-controls audio { width: 150px; }
-                
                 .available-clips-container {
                     display: flex;
                     gap: 1rem;
@@ -79,7 +63,7 @@ class PlaylistCreator extends HTMLElement {
                     background-color: #ffffff;
                     padding: 1rem;
                     border-radius: 0.5rem;
-                    min-width: 150px;
+                    min-width: 200px;
                     cursor: pointer;
                     transition: all 0.2s ease;
                     border: 2px solid #e5e7eb;
@@ -124,7 +108,7 @@ class PlaylistCreator extends HTMLElement {
                 
                 <!-- Current Clips Section -->
                 <div class="section">
-                    <h3>Playlist Clips (${this.currentPlaylistClips?.length || 0})</h3>
+                    <h3 id="clips-header">Playlist Clips (0)</h3>
                     <div id="clips-container"></div>
                 </div>
 
@@ -184,15 +168,13 @@ class PlaylistCreator extends HTMLElement {
             eventBus.publish('finalize-playlist-requested');
         });
         
-        // Clip management
-        const clipsContainer = this.shadowRoot.querySelector('#clips-container');
-        clipsContainer.addEventListener('click', (e) => {
-            if (e.target.classList.contains('remove-clip-btn')) {
-                const clipId = parseInt(e.target.dataset.id);
-                this.removeClipFromPlaylist(clipId);
-            }
+        // Listen for remove events from audio-preview components
+        this.shadowRoot.addEventListener('clip-remove', (e) => {
+            const clipId = parseInt(e.detail.clipId);
+            this.removeClipFromPlaylist(clipId);
         });
         
+        // Handle clicks on available clips
         this.shadowRoot.querySelector('#available-clips-container').addEventListener('click', (e) => {
             if (e.target.closest('.clip-card')) {
                 const clipId = parseInt(e.target.closest('.clip-card').dataset.id);
@@ -272,18 +254,25 @@ class PlaylistCreator extends HTMLElement {
             const card = document.createElement('div');
             card.className = 'clip-card';
             card.dataset.id = clip.id;
-            card.innerHTML = `
-                <h4>${clip.title}</h4>
-                <p>${this.formatDuration(clip.duration)}</p>
-                <small>Click to add</small>
-            `;
+            
+            // Create audio preview component for available clips
+            const audioPreview = document.createElement('audio-preview');
+            audioPreview.setAttribute('clip-id', clip.id.toString());
+            audioPreview.setAttribute('title', clip.title);
+            audioPreview.setAttribute('duration', this.formatDuration(clip.duration));
+            audioPreview.setAttribute('layout', 'compact');
+            audioPreview.setAudioBlob(clip.audioBlob);
+            
+            card.appendChild(audioPreview);
+            card.innerHTML += '<small style="display: block; margin-top: 0.5rem; text-align: center; color: var(--secondary-color);">Click to add to playlist</small>';
+            
             container.appendChild(card);
         });
     }
 
     formatDuration(seconds) {
         if (isNaN(seconds) || seconds === Infinity || !seconds) {
-            return 'N/A';
+            return '0:00';
         }
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = Math.floor(seconds % 60);
@@ -292,7 +281,10 @@ class PlaylistCreator extends HTMLElement {
 
     async renderClips() {
         const container = this.shadowRoot.querySelector('#clips-container');
+        const headerEl = this.shadowRoot.querySelector('#clips-header');
+        
         container.innerHTML = '';
+        headerEl.textContent = `Playlist Clips (${this.currentPlaylistClips.length})`;
 
         if (this.currentPlaylistClips.length === 0) {
             container.innerHTML = '<div class="empty-state">No clips in playlist yet. Add some audio clips!</div>';
@@ -300,23 +292,16 @@ class PlaylistCreator extends HTMLElement {
         }
 
         for (const clip of this.currentPlaylistClips) {
-            const item = document.createElement('div');
-            item.className = 'playlist-clip-item';
-            const audioUrl = URL.createObjectURL(clip.audioBlob);
-
-            item.innerHTML = `
-                <span><strong>${clip.title}</strong></span>
-                <div class="clip-controls">
-                    <audio controls src="${audioUrl}"></audio>
-                    <span>${this.formatDuration(clip.duration)}</span>
-                    <button data-id="${clip.id}" class="remove-clip-btn btn btn-secondary">Remove</button>
-                </div>
-            `;
-            container.appendChild(item);
+            // Create audio preview component for playlist clips
+            const audioPreview = document.createElement('audio-preview');
+            audioPreview.setAttribute('clip-id', clip.id.toString());
+            audioPreview.setAttribute('title', clip.title);
+            audioPreview.setAttribute('duration', this.formatDuration(clip.duration));
+            audioPreview.setAttribute('layout', 'playlist');
+            audioPreview.setAudioBlob(clip.audioBlob);
+            
+            container.appendChild(audioPreview);
         }
-
-        // Update the section header with current count
-        this.shadowRoot.querySelector('h3').textContent = `Playlist Clips (${this.currentPlaylistClips.length})`;
     }
 }
 

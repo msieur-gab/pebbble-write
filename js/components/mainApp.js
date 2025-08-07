@@ -5,18 +5,20 @@ import { eventBus } from '../services/eventBus.js';
 import { appState } from '../services/appState.js';
 import { MessageDb } from '../services/messageDb.js';
 import { StorageService } from '../services/storageService.js';
+import { audioPlayerService } from '../services/audioPlayerService.js'; // Initialize audio service
 
 // Import all components
 import './apiSetupForm.js';
 import './homeView.js';
 import './playlistsView.js'; 
 import './playlistCreator.js';      
-import './audioCreator.js';         // Renamed from audioManagement.js
-import './playlistFinalization.js';  // New
-import './writerResults.js';         // New
-import './serialModal.js';           // Updated
+import './audioCreator.js';         
+import './playlistFinalization.js';  
+import './writerResults.js';         
+import './serialModal.js';           
 import './ui/toast.js';
 import './ui/fab.js';
+import './ui/audioPreview.js';  // Import the reusable audio preview component
 
 class MainApp extends HTMLElement {
     constructor() {
@@ -70,7 +72,6 @@ class MainApp extends HTMLElement {
         // Navigation events
         eventBus.subscribe('new-playlist-requested', () => {
             appState.navigateTo('playlistCreator');
-            // Will be set up in setupViewData
         });
         
         eventBus.subscribe('new-recording-requested', () => {
@@ -84,7 +85,6 @@ class MainApp extends HTMLElement {
         eventBus.subscribe('open-playlist', (data) => {
             appState.set('pendingPlaylistData', data.playlist);
             appState.navigateTo('playlistCreator');
-            // Will be set up in setupViewData
         });
 
         // Playlist operations
@@ -102,20 +102,17 @@ class MainApp extends HTMLElement {
         });
 
         eventBus.subscribe('hide-serial-modal', () => {
-            // Return to where we were (usually finalization)
             if (appState.get('currentView') === 'serialModal') {
                 appState.navigateTo('playlistFinalization');
             }
         });
 
         eventBus.subscribe('modal-close', () => {
-            // User cancelled, go back to playlist creator
             appState.navigateTo('playlistCreator');
         });
     }
 
     setupStateSubscriptions() {
-        // React to state changes
         appState.subscribe('currentView', (newView) => {
             this.switchToView(newView);
         });
@@ -130,7 +127,6 @@ class MainApp extends HTMLElement {
 
     async initializeApp() {
         try {
-            // Check for existing credentials
             const apiKey = (await this.db.getSetting('apiKey'))?.value;
             const secret = (await this.db.getSetting('secret'))?.value;
 
@@ -152,14 +148,12 @@ class MainApp extends HTMLElement {
     }
 
     switchToView(viewName) {
-        // Hide all views first
         const views = this.shadowRoot.querySelectorAll('.view');
         views.forEach(view => view.classList.add('hidden'));
         
         const mainContainer = this.shadowRoot.querySelector('#mainAppContainer');
         const serialModal = this.shadowRoot.querySelector('serial-modal');
         
-        // Handle special cases first
         if (viewName === 'serialModal') {
             serialModal.shadowRoot.querySelector('modal-component').open();
             return;
@@ -167,7 +161,6 @@ class MainApp extends HTMLElement {
             serialModal.shadowRoot.querySelector('modal-component').close();
         }
         
-        // Handle main views
         let targetView = null;
         
         switch(viewName) {
@@ -191,17 +184,13 @@ class MainApp extends HTMLElement {
         if (targetView) {
             targetView.classList.remove('hidden');
             log(`Switched to view: ${viewName}`, 'info');
-            
-            // Handle view-specific setup
             this.setupViewData(viewName, targetView);
         }
     }
 
     setupViewData(viewName, viewElement) {
-        // Set up data for views that need it
         switch(viewName) {
             case 'homeView':
-                // Refresh playlists when returning home
                 const playlistsView = viewElement.shadowRoot?.querySelector('playlists-view');
                 if (playlistsView) {
                     playlistsView.loadPlaylists();
@@ -209,11 +198,8 @@ class MainApp extends HTMLElement {
                 break;
                 
             case 'playlistCreator':
-                // Initialize playlist creator with data (null for new, or existing playlist)
                 const pendingData = appState.get('pendingPlaylistData');
                 viewElement.setPlaylistData(pendingData || null);
-                
-                // Clear the pending data
                 appState.set('pendingPlaylistData', null);
                 
                 if (pendingData) {
@@ -225,7 +211,6 @@ class MainApp extends HTMLElement {
         }
     }
 
-    // Event Handlers
     async handleCredentialsSet({ apiKey, secret }) {
         try {
             await this.db.saveSetting('apiKey', apiKey);
@@ -246,7 +231,6 @@ class MainApp extends HTMLElement {
 
     async handleSavePlaylist(playlistData) {
         try {
-            // For new playlists, don't include id field at all
             const playlist = {
                 name: playlistData.name,
                 description: playlistData.description,
@@ -254,7 +238,6 @@ class MainApp extends HTMLElement {
                 timestamp: Date.now()
             };
 
-            // Only add id if it's a valid existing playlist
             if (playlistData.id) {
                 playlist.id = playlistData.id;
             }
@@ -273,7 +256,6 @@ class MainApp extends HTMLElement {
     }
 
     async handleFinalizationRequest() {
-        // Get current playlist data from playlist creator
         const playlistCreator = this.shadowRoot.querySelector('#playlistCreator');
         
         const playlistData = {
@@ -282,10 +264,8 @@ class MainApp extends HTMLElement {
             id: playlistCreator.currentPlaylistId
         };
 
-        // Switch to finalization view
         appState.navigateTo('playlistFinalization');
         
-        // Start finalization process
         const finalizationComponent = this.shadowRoot.querySelector('#playlistFinalization');
         finalizationComponent.reset();
         finalizationComponent.startFinalization(playlistData, this.storageService);

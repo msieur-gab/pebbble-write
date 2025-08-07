@@ -60,20 +60,23 @@ class AudioCreator extends HTMLElement {
 
     setupEventListeners() {
         // Listen for saved audio clip from the shared component
-        eventBus.subscribe('audio-clip-saved', (savedClip) => {
-            this.handleAudioSaved(savedClip);
+        eventBus.subscribe('audio-recorded', (audioData) => {
+            this.handleAudioSaved(audioData);
         });
         
         // Back button
         this.shadowRoot.querySelector('#back-to-home-btn').addEventListener('click', () => {
+            // Stop any audio before navigating
+            const audioRecorder = this.shadowRoot.querySelector('#audio-recorder');
+            if (audioRecorder) {
+                audioRecorder.resetRecorder();
+            }
             eventBus.publish('back-to-home');
         });
     }
 
-    handleAudioSaved(savedClip) {
-        // Audio is already saved to database by audioRecorder
-        // Just handle the post-save actions
-        log(`Audio clip "${savedClip.title}" saved to library.`, 'success');
+    handleAudioSaved(audioData) {
+        log(`Audio clip "${audioData.title}" ready to save.`, 'success');
         
         // Automatically go back to home after saving
         setTimeout(() => {
