@@ -4,6 +4,8 @@
 import { eventBus } from '../../services/eventBus.js';
 import { audioPlayerService } from '../../services/audioPlayerService.js';
 
+
+
 class AudioPreview extends HTMLElement {
     static get observedAttributes() {
         return ['clip-id', 'title', 'duration', 'layout'];

@@ -1,4 +1,4 @@
-// js/components/homeView.js - Updated with Audio Library access
+// js/components/homeView.js - Mobile-Friendly
 
 import { eventBus } from '../services/eventBus.js';
 import { log } from '../utils/log.js';
@@ -16,98 +16,135 @@ class HomeViewComponent extends HTMLElement {
     render() {
         this.shadowRoot.innerHTML = `
             <style>
-                .container { padding: 1rem; text-align: center; }
-                .btn { 
-                    padding: 0.75rem 1.5rem; 
-                    font-weight: 700; 
-                    border-radius: 0.5rem; 
-                    cursor: pointer; 
-                    border: none; 
-                    transition: background-color 0.3s ease;
-                    margin: 0.5rem;
+                :host { 
+                    display: block; 
+                    padding: 1rem;
+                    height: 100%;
                 }
-                .btn-primary { 
-                    background-color: var(--primary-color); 
-                    color: #ffffff; 
+                
+                .home-container { 
+                    height: 100%;
+                    display: flex;
+                    flex-direction: column;
                 }
-                .btn-secondary { 
-                    background-color: #e5e7eb; 
-                    color: #1f2937; 
+                
+                .welcome-section {
+                    text-align: center;
+                    margin-bottom: 1.5rem;
                 }
-                .btn-outline {
-                    background-color: transparent;
-                    color: var(--primary-color);
-                    border: 2px solid var(--primary-color);
+                
+                .welcome-section h2 {
+                    margin: 0 0 0.5rem 0;
+                    font-size: 1.5rem;
+                    color: #1f2937;
                 }
-                .btn:hover.btn-primary { background-color: var(--button-hover); }
-                .btn:hover.btn-secondary { background-color: #d1d5db; }
-                .btn:hover.btn-outline { 
-                    background-color: var(--primary-color); 
-                    color: white; 
+                
+                .welcome-section p {
+                    margin: 0;
+                    color: var(--secondary-color);
                 }
-                .space-y-4 > * + * { margin-top: 1rem; }
+                
+                /* Mobile-first action grid */
                 .action-grid {
                     display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                    grid-template-columns: 1fr;
                     gap: 1rem;
-                    margin: 2rem 0;
+                    margin-bottom: 2rem;
                 }
+                
                 .action-card {
                     background: #f9fafb;
-                    border: 2px solid #e5e7eb;
+                    border: 1px solid #e5e7eb;
                     border-radius: 0.75rem;
                     padding: 1.5rem;
                     text-align: center;
-                    transition: all 0.3s ease;
+                    transition: all 0.2s ease;
                     cursor: pointer;
+                    /* Better touch target */
+                    min-height: 100px;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
                 }
-                .action-card:hover {
+                
+                .action-card:active {
+                    background: #f3f4f6;
+                    transform: scale(0.98);
                     border-color: var(--primary-color);
-                    transform: translateY(-2px);
-                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
                 }
+                
                 .action-card h3 {
-                    margin: 0 0 0.5rem 0;
+                    margin: 0.5rem 0;
                     color: #374151;
+                    font-size: 1.125rem;
                 }
+                
                 .action-card p {
                     margin: 0;
                     color: var(--secondary-color);
                     font-size: 0.875rem;
+                    line-height: 1.4;
                 }
+                
                 .action-icon {
                     font-size: 2rem;
-                    margin-bottom: 1rem;
+                    margin-bottom: 0.5rem;
+                }
+                
+                .playlists-section {
+                    flex: 1;
+                    min-height: 0; /* Allow scrolling */
+                }
+                
+                /* Tablet and up: grid layout */
+                @media (min-width: 640px) {
+                    .action-grid {
+                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    }
+                }
+                
+                /* Hover effects only on non-touch devices */
+                @media (hover: hover) {
+                    .action-card:hover {
+                        border-color: var(--primary-color);
+                        transform: translateY(-2px);
+                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+                    }
                 }
             </style>
-            <div class="container space-y-4">
-                <h2>Welcome to Pebbble Writer</h2>
-                <p>What would you like to do?</p>
+            
+            <div class="home-container">
+                <section class="welcome-section">
+                    <h2>Welcome to Pebbble Writer</h2>
+                    <p>What would you like to do?</p>
+                </section>
                 
-                <div class="action-grid">
-                    <div class="action-card" id="new-playlist-card">
+                <section class="action-grid">
+                    <article class="action-card" id="new-playlist-card">
                         <div class="action-icon">📋</div>
                         <h3>Create Playlist</h3>
                         <p>Build a new playlist with voice recordings and music</p>
-                    </div>
+                    </article>
                     
-                    <div class="action-card" id="new-recording-card">
+                    <article class="action-card" id="new-recording-card">
                         <div class="action-icon">🎤</div>
                         <h3>Record Audio</h3>
                         <p>Create a new voice recording or upload music</p>
-                    </div>
+                    </article>
                     
-                    <div class="action-card" id="audio-library-card">
+                    <article class="action-card" id="audio-library-card">
                         <div class="action-icon">🎵</div>
                         <h3>Audio Library</h3>
                         <p>Manage and organize all your audio clips</p>
-                    </div>
-                </div>
+                    </article>
+                </section>
                 
-                <div class="mt-4">
+                <section class="playlists-section">
                     <playlists-view></playlists-view>
-                </div>
+                </section>
             </div>
+            
             <fab-component></fab-component>
         `;
     }
@@ -124,7 +161,6 @@ class HomeViewComponent extends HTMLElement {
             eventBus.publish('new-recording-requested');
         });
         
-        // NEW: Audio library access
         this.shadowRoot.querySelector('#audio-library-card').addEventListener('click', () => {
             log('Opening audio library...', 'info');
             eventBus.publish('open-audio-library');

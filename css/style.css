@@ -1,4 +1,4 @@
-/* style.css */
+/* Mobile-First CSS Update for Pebbble Playlist Writer */
 
 :root {
     --primary-color: #4f46e5;
@@ -6,81 +6,110 @@
     --accent-color: #ef4444;
     --success-color: #22c55e;
     --warning-color: #f59e0b;
-    --info-bg: #eef2ff;
-    --info-text: #4338ca;
-    --error-bg: #fee2e2;
-    --error-text: #b91c1c;
-    --log-bg: #1f2937;
-    --log-text: #d1d5db;
-    --log-success: #86efac;
-    --log-error: #fca5a5;
-    --log-warning: #fde047;
     --button-hover: #4338ca;
+    
+    /* Mobile-specific spacing */
+    --mobile-padding: 1rem;
+    --mobile-gap: 0.75rem;
+}
+
+/* Reset and base mobile styles */
+* {
+    box-sizing: border-box;
 }
 
 body {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    margin: 0;
+    padding: 0;
     background-color: #f3f4f6;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    color: #1f2937;
+    line-height: 1.5;
+    /* Mobile-first: full height, no centering */
     min-height: 100vh;
-    padding: 1rem;
+    display: flex;
+    flex-direction: column;
 }
 
+/* Remove the centered container approach */
 .app-container {
-    background-color: #ffffff;
-    padding: 2rem;
-    border-radius: 1rem;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    /* Mobile: take full width and height */
+    flex: 1;
     width: 100%;
-    max-width: 600px;
-    position: relative;
+    background-color: #ffffff;
+    /* No centering, no max-width, no large shadows */
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
 }
 
+/* Mobile header */
 .app-header {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
+    gap: var(--mobile-gap);
+    padding: var(--mobile-padding);
+    background-color: #ffffff;
+    border-bottom: 1px solid #e5e7eb;
+    /* Sticky header for mobile */
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 .logo {
-    width: 4rem;
-    height: 4rem;
+    width: 2.5rem;
+    height: 2.5rem;
     background-color: var(--primary-color);
-    border-radius: 9999px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
 .logo-icon {
-    height: 2.5rem;
-    width: 2.5rem;
+    height: 1.5rem;
+    width: 1.5rem;
     color: #ffffff;
 }
 
 .title {
-    font-size: 1.875rem;
-    line-height: 2.25rem;
+    font-size: 1.25rem;
     font-weight: 700;
     color: #1f2937;
+    margin: 0;
 }
 
 .subtitle {
     color: var(--secondary-color);
-    margin-top: 0.25rem;
+    font-size: 0.875rem;
+    margin: 0;
 }
 
-/* General button styling */
+/* Main content area */
+.app-main {
+    flex: 1;
+    padding: var(--mobile-padding);
+    overflow-y: auto;
+}
+
+/* Mobile-friendly buttons */
 .btn {
     padding: 0.75rem 1.5rem;
-    font-weight: 700;
+    font-weight: 600;
     border-radius: 0.5rem;
     cursor: pointer;
     border: none;
-    transition: background-color 0.3s ease;
+    transition: all 0.2s ease;
+    font-size: 1rem;
+    /* Better touch targets */
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
 }
 
 .btn-primary {
@@ -88,7 +117,7 @@ body {
     color: #ffffff;
 }
 
-.btn-primary:hover {
+.btn-primary:hover, .btn-primary:active {
     background-color: var(--button-hover);
 }
 
@@ -97,17 +126,20 @@ body {
     color: #1f2937;
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover, .btn-secondary:active {
     background-color: #d1d5db;
 }
 
-/* Form inputs */
+/* Mobile form inputs */
 .form-input {
     width: 100%;
     padding: 0.75rem;
     border: 2px solid #d1d5db;
     border-radius: 0.5rem;
-    transition: border-color 0.3s ease;
+    font-size: 1rem;
+    transition: border-color 0.2s ease;
+    /* Prevent zoom on iOS */
+    font-size: 16px;
 }
 
 .form-input:focus {
@@ -115,121 +147,79 @@ body {
     border-color: var(--primary-color);
 }
 
-/* Status messages */
-.status-box {
-    padding: 1rem;
-    border-radius: 0.5rem;
-    font-size: 0.875rem;
-    margin-bottom: 1.5rem;
+/* Mobile card layout */
+.card {
+    background-color: #ffffff;
+    border-radius: 0.75rem;
+    padding: var(--mobile-padding);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    margin-bottom: var(--mobile-gap);
 }
 
-.status-box.warning {
-    background-color: #fffbeb;
-    border: 1px solid #fcd34d;
-    color: #92400e;
+/* Mobile-friendly action grid */
+.action-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--mobile-gap);
+    margin: var(--mobile-padding) 0;
 }
 
-.process-status {
-    margin-top: 1rem;
-    padding: 1rem;
-    border-radius: 0.5rem;
-    background-color: var(--info-bg);
-    color: var(--info-text);
+.action-card {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    padding: var(--mobile-padding);
     text-align: center;
-    transition: background-color 0.3s ease;
-}
-
-.process-status.success {
-    background-color: var(--success-color);
-    color: white;
-}
-
-.process-status.error {
-    background-color: var(--error-bg);
-    color: var(--error-text);
-}
-
-
-/* Recording UI */
-.recording-btn {
-    width: 6rem;
-    height: 6rem;
-    border-radius: 9999px;
-    background-color: var(--accent-color);
-    color: #ffffff;
-    font-size: 1.875rem;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    /* Better touch target */
+    min-height: 80px;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    margin: auto;
-    box-shadow: 0 10px 15px -3px rgba(239, 68, 68, 0.5);
-    transition: all 0.2s ease;
 }
 
-.recording-btn:hover {
-    transform: scale(1.1);
+.action-card:active {
+    background: #f3f4f6;
+    transform: scale(0.98);
 }
 
-.recording-btn.pulse {
-    animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-}
-
-/* Playlist items */
-.playlist-item {
-    background-color: #f9fafb;
-    padding: 0.75rem;
-    border-radius: 0.5rem;
+/* Mobile FAB */
+.fab-btn {
+    position: fixed;
+    bottom: var(--mobile-padding);
+    right: var(--mobile-padding);
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 50%;
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 1.5rem;
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    margin-bottom: 0.5rem;
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+    z-index: 20;
 }
 
-.playlist-card-container {
-    display: flex;
-    gap: 1rem;
-    overflow-x: auto;
-    padding-bottom: 1rem;
+.fab-btn:active {
+    transform: scale(0.95);
 }
 
-/* Log container */
-.log-container {
-    margin-top: 2rem;
-    background-color: var(--log-bg);
-    color: var(--log-text);
-    border-radius: 0.5rem;
-    padding: 1rem;
-    max-height: 10rem;
-    overflow-y: auto;
+/* Mobile toast positioning */
+toast-component {
+    position: fixed;
+    bottom: 5rem;
+    left: var(--mobile-padding);
+    right: var(--mobile-padding);
+    z-index: 30;
 }
 
-.log-header {
-    font-family: monospace;
-    font-size: 0.75rem;
-    color: var(--log-success);
-    margin-bottom: 0.5rem;
-}
-
-.log-item {
-    display: flex;
-    gap: 0.5rem;
-    font-family: monospace;
-    font-size: 0.75rem;
-    line-height: 1.25;
-}
-
-.log-item.success {
-    color: var(--log-success);
-}
-
-/* Modal and FAB styles */
+/* Mobile modal */
 .modal {
     position: fixed;
     top: 0;
@@ -238,45 +228,75 @@ body {
     height: 100%;
     background-color: rgba(0, 0, 0, 0.5);
     display: flex;
+    align-items: flex-end;
     justify-content: center;
-    align-items: center;
+    z-index: 25;
 }
 
 .modal-content {
     background-color: white;
-    padding: 2rem;
-    border-radius: 1rem;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-    width: 90%;
-    max-width: 400px;
+    width: 100%;
+    max-height: 90vh;
+    border-radius: 1rem 1rem 0 0;
+    padding: var(--mobile-padding);
+    overflow-y: auto;
 }
 
-.fab-btn {
-    position: fixed;
-    bottom: 2rem;
-    right: 2rem;
-    width: 4rem;
-    height: 4rem;
-    border-radius: 9999px;
-    background-color: var(--primary-color);
-    color: white;
-    font-size: 2.5rem;
-    line-height: 1;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-    cursor: pointer;
-    border: none;
-    transition: all 0.2s ease;
-    z-index: 10;
+/* Log container - hide on mobile by default */
+.log-container {
+    display: none;
 }
 
-.fab-btn:hover {
-    transform: scale(1.1);
+/* Tablet and up: restore some desktop-like behavior */
+@media (min-width: 768px) {
+    .app-container {
+        max-width: 600px;
+        margin: 0 auto;
+        min-height: auto;
+        border-radius: 1rem;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        margin-top: 2rem;
+        margin-bottom: 2rem;
+    }
+    
+    body {
+        padding: 1rem;
+    }
+    
+    .action-grid {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+    
+    .modal {
+        align-items: center;
+    }
+    
+    .modal-content {
+        width: 90%;
+        max-width: 400px;
+        border-radius: 1rem;
+    }
+    
+    .log-container {
+        display: block;
+        margin-top: 2rem;
+        background-color: #1f2937;
+        color: #d1d5db;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        max-height: 8rem;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 0.75rem;
+    }
 }
 
-.fab-btn.active {
-    background-color: var(--success-color);
-    animation: pulse 1.5s infinite;
-}
+/* Utility classes */
+.hidden { display: none !important; }
+.text-center { text-align: center; }
+.space-y-4 > * + * { margin-top: 1rem; }
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.gap-4 { gap: 1rem; }

@@ -1,8 +1,8 @@
 // js/components/ui/fab.js
-// FIXED: Back to original logic, just add minimal appState integration
+// FIXED: Your original logic with mobile-friendly styles
 
 import { eventBus } from '../../services/eventBus.js';
-import { appState } from '../../services/appState.js'; // NEW: Only addition
+import { appState } from '../../services/appState.js';
 
 class FabComponent extends HTMLElement {
     constructor() {
@@ -11,23 +11,22 @@ class FabComponent extends HTMLElement {
         this.isMenuOpen = false;
         this.render();
         this.setupEventListeners();
-        this.setupAppStateSubscription(); // NEW: Only new method
+        this.setupAppStateSubscription();
     }
 
-    // EXACT copy from original fab.js
     render() {
         this.shadowRoot.innerHTML = `
             <style>
                 :host {
                     position: fixed;
-                    bottom: 2rem;
-                    right: 2rem;
+                    bottom: 1rem;
+                    right: 1rem;
                     z-index: 10;
                     display: none; /* The FAB is now hidden by default */
                 }
                 .fab-menu-container {
                     display: none;
-                    flex-direction: column-reverse;
+                    flex-direction: column;
                     align-items: flex-end;
                     transition: all 0.3s ease;
                 }
@@ -35,40 +34,54 @@ class FabComponent extends HTMLElement {
                     display: flex;
                 }
                 .fab-btn {
-                    width: 4rem;
-                    height: 4rem;
+                    width: 3.5rem;
+                    height: 3.5rem;
                     border-radius: 9999px;
                     background-color: var(--primary-color);
                     color: white;
-                    font-size: 2.5rem;
+                    font-size: 1.5rem;
                     line-height: 1;
                     display: flex;
                     justify-content: center;
                     align-items: center;
-                    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+                    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
                     cursor: pointer;
                     border: none;
                     transition: all 0.2s ease;
-                    margin-top: 1rem;
+                    order: 2; /* FAB goes to bottom */
+                    /* Disable text selection */
+                    -webkit-user-select: none;
+                    -moz-user-select: none;
+                    -ms-user-select: none;
+                    user-select: none;
+                    -webkit-tap-highlight-color: transparent;
                 }
-                .fab-btn:hover {
-                    transform: scale(1.1);
+                .fab-btn:active {
+                    transform: scale(0.95);
                 }
                 .menu-option {
-                    font-size: 1rem;
-                    padding: 0.5rem 1rem;
-                    color: #fff;
-                    background-color: var(--secondary-color);
+                    font-size: 0.875rem;
+                    padding: 0.75rem 1rem;
+                    color: #374151;
+                    background-color: white;
+                    border: 1px solid #e5e7eb;
                     border-radius: 0.5rem;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                    margin-bottom: 0.5rem;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+                    margin-bottom: 0.75rem;
                     display: none;
                     opacity: 0;
-                    transform: translateX(20px);
+                    transform: translateY(10px);
                     transition: all 0.3s ease;
                     pointer-events: none;
-                    border: none;
                     cursor: pointer;
+                    white-space: nowrap;
+                    order: 1; /* Menu items go to top */
+                    /* Disable text selection */
+                    -webkit-user-select: none;
+                    -moz-user-select: none;
+                    -ms-user-select: none;
+                    user-select: none;
+                    -webkit-tap-highlight-color: transparent;
                 }
                 .menu-option.visible {
                     display: block;
@@ -76,8 +89,37 @@ class FabComponent extends HTMLElement {
                     transform: translateX(0);
                     pointer-events: auto;
                 }
+                .menu-option:active {
+                    background-color: #f3f4f6;
+                    transform: scale(0.95);
+                }
                 .main-fab {
                     background-color: var(--primary-color);
+                }
+                
+                /* Tablet and up */
+                @media (min-width: 768px) {
+                    :host {
+                        bottom: 2rem;
+                        right: 2rem;
+                    }
+                    .fab-btn {
+                        width: 4rem;
+                        height: 4rem;
+                        font-size: 2.5rem;
+                    }
+                    .menu-option {
+                        font-size: 1rem;
+                        padding: 0.5rem 1rem;
+                        margin-bottom: 0.5rem;
+                    }
+                    .fab-btn:hover {
+                        transform: scale(1.1);
+                    }
+                    .menu-option:hover {
+                        background-color: #f9fafb;
+                        border-color: var(--primary-color);
+                    }
                 }
             </style>
             <div class="fab-menu-container" id="fab-menu-container">
@@ -88,7 +130,7 @@ class FabComponent extends HTMLElement {
         `;
     }
     
-    // EXACT copy from original fab.js
+    // EXACT copy from your original fab.js
     setupEventListeners() {
         const mainFab = this.shadowRoot.querySelector('#main-fab');
         const newRecordingBtn = this.shadowRoot.querySelector('#new-recording-btn');
@@ -109,7 +151,7 @@ class FabComponent extends HTMLElement {
         });
     }
 
-    // NEW: Only new method - minimal state integration
+    // Your original appState integration
     setupAppStateSubscription() {
         appState.subscribe('currentView', (newView) => {
             const container = this.shadowRoot.querySelector('#fab-menu-container');
@@ -125,7 +167,7 @@ class FabComponent extends HTMLElement {
         });
     }
 
-    // EXACT copy from original fab.js
+    // EXACT copy from your original fab.js
     toggleMenu(forceState = null) {
         this.isMenuOpen = forceState !== null ? forceState : !this.isMenuOpen;
         const container = this.shadowRoot.querySelector('#fab-menu-container');

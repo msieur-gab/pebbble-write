@@ -133,28 +133,35 @@ class MainApp extends HTMLElement {
     }
 
     async initializeApp() {
+        
         try {
             const apiKey = (await this.db.getSetting('apiKey'))?.value;
             const secret = (await this.db.getSetting('secret'))?.value;
-
+            
+            // console.log('📊 Credentials check:', { 
+            //     hasApiKey: !!apiKey, 
+            //     hasSecret: !!secret 
+            // });
+    
             if (apiKey && secret) {
                 appState.setCredentials(apiKey, secret);
-                appState.update({
-                    currentView: 'homeView',
-                    showFab: true
-                });
+                appState.set('currentView', 'homeView');
+                this.switchToView('homeView');  
             } else {
                 appState.set('currentView', 'apiSetupForm');
+                this.switchToView('apiSetupForm');  
             }
             
             log('MainApp initialized successfully', 'success');
         } catch (error) {
-            log('Failed to initialize MainApp', 'error');
             appState.set('currentView', 'apiSetupForm');
+            this.switchToView('apiSetupForm');  
         }
     }
 
     switchToView(viewName) {
+        // console.log('🔄 switchToView called with:', viewName);  
+
         const views = this.shadowRoot.querySelectorAll('.view');
         views.forEach(view => view.classList.add('hidden'));
         
@@ -172,7 +179,7 @@ class MainApp extends HTMLElement {
         
         switch(viewName) {
             case 'apiSetupForm':
-                targetView = this.shadowRoot.querySelector('#apiSetupForm');
+                targetView = this.shadowRoot.querySelector('#apiSetupForm');  // CORRECT ID
                 break;
                 
             case 'homeView':

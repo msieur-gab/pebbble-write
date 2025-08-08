@@ -1,4 +1,4 @@
-// components/ui/toast.js
+// js/components/ui/toast.js - Mobile-Friendly
 
 import { eventBus } from '../../services/eventBus.js';
 
@@ -17,36 +17,76 @@ class ToastComponent extends HTMLElement {
             <style>
                 :host {
                     position: fixed;
-                    bottom: 2rem;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    z-index: 50;
+                    top: 5rem;
+                    left: 1rem;
+                    right: 1rem;
+                    z-index: 40;
                     display: flex;
-                    flex-direction: column-reverse; /* Show new toasts on top */
+                    flex-direction: column-reverse;
                     align-items: center;
-                    pointer-events: none; /* Allows clicks to pass through empty space */
+                    pointer-events: none;
                 }
+                
                 .toast {
                     background-color: var(--primary-color);
                     color: white;
-                    padding: 0.75rem 1.5rem;
-                    border-radius: 0.5rem;
-                    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+                    padding: 1rem 1.5rem;
+                    border-radius: 0.75rem;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
                     opacity: 0;
                     transform: translateY(20px);
-                    transition: all 0.4s ease-in-out;
+                    transition: all 0.3s ease-in-out;
                     margin-top: 0.5rem;
-                    min-width: 250px;
                     text-align: center;
-                    pointer-events: auto; /* Re-enable pointer events for the toast itself */
+                    pointer-events: auto;
+                    max-width: 100%;
+                    font-size: 0.875rem;
+                    line-height: 1.4;
+                    cursor: pointer;
+                    /* Disable text selection */
+                    -webkit-user-select: none;
+                    -moz-user-select: none;
+                    -ms-user-select: none;
+                    user-select: none;
+                    -webkit-tap-highlight-color: transparent;
                 }
+                
                 .toast.show {
                     opacity: 1;
                     transform: translateY(0);
                 }
-                .toast.success { background-color: var(--success-color); }
-                .toast.error { background-color: var(--accent-color); }
-                .toast.warning { background-color: var(--warning-color); }
+                
+                .toast.success { 
+                    background-color: var(--success-color); 
+                }
+                
+                .toast.error { 
+                    background-color: var(--accent-color); 
+                }
+                
+                .toast.warning { 
+                    background-color: var(--warning-color);
+                    color: #1f2937;
+                }
+                
+                .toast.info { 
+                    background-color: #3b82f6; 
+                }
+                
+                /* Tablet and up: center positioning */
+                @media (min-width: 768px) {
+                    :host {
+                        bottom: 2rem;
+                        left: 50%;
+                        right: auto;
+                        transform: translateX(-50%);
+                    }
+                    
+                    .toast {
+                        min-width: 250px;
+                        max-width: 400px;
+                    }
+                }
             </style>
         `;
     }
@@ -67,18 +107,28 @@ class ToastComponent extends HTMLElement {
         this.isShowing = true;
         const data = this.toastQueue.shift();
         const toast = document.createElement('div');
-        toast.className = `toast show ${data.type}`;
+        toast.className = `toast show ${data.type || 'info'}`;
         toast.textContent = data.message;
         
         this.shadowRoot.appendChild(toast);
 
+        // Auto-dismiss after duration
+        const duration = data.duration || 3000;
         setTimeout(() => {
             toast.classList.remove('show');
             toast.addEventListener('transitionend', () => {
-                toast.remove();
+                if (toast.parentNode) {
+                    toast.remove();
+                }
                 this.processQueue();
             }, { once: true });
-        }, 3000); // Toast disappears after 3 seconds
+        }, duration);
+        
+        // Allow manual dismissal on tap
+        toast.addEventListener('click', () => {
+            toast.classList.remove('show');
+        });
     }
 }
+
 customElements.define('toast-component', ToastComponent);
