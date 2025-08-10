@@ -1,5 +1,5 @@
 // js/services/audioPlayerService.js
-// Simple, bulletproof audio service
+// Fixed: Added proper URL cleanup to prevent memory leaks
 
 import { eventBus } from './eventBus.js';
 import { log } from '../utils/log.js';
@@ -20,6 +20,9 @@ class AudioPlayerService {
             log('Audio playback ended.', 'info');
             const endedId = this.currentPlayingId;
             this.currentPlayingId = null;
+            
+            // Clean up URL when audio ends
+            this.cleanupCurrentUrl();
             
             if (endedId) {
                 eventBus.publish('audio-state-changed', { 
@@ -64,6 +67,9 @@ class AudioPlayerService {
                     const stoppedId = this.currentPlayingId;
                     this.currentPlayingId = null;
                     
+                    // Clean up URL when playback stops unexpectedly
+                    this.cleanupCurrentUrl();
+                    
                     eventBus.publish('audio-state-changed', { 
                         id: stoppedId, 
                         isPlaying: false 
@@ -71,6 +77,15 @@ class AudioPlayerService {
                 }
             }
         }, 500); // Check twice per second
+    }
+
+    // FIXED: Clean up old URLs to prevent memory leaks
+    cleanupCurrentUrl() {
+        if (this.currentUrl) {
+            URL.revokeObjectURL(this.currentUrl);
+            this.currentUrl = null;
+            log('Cleaned up audio blob URL', 'info');
+        }
     }
 
     play(id, audioBlob) {
@@ -95,10 +110,8 @@ class AudioPlayerService {
             });
         }
 
-        // Clean up old URL
-        if (this.currentUrl) {
-            URL.revokeObjectURL(this.currentUrl);
-        }
+        // FIXED: Clean up old URL before creating new one
+        this.cleanupCurrentUrl();
 
         // Setup new audio
         this.currentUrl = URL.createObjectURL(audioBlob);
@@ -117,6 +130,7 @@ class AudioPlayerService {
             .catch(error => {
                 log(`Failed to play audio: ${error.message}`, 'error');
                 this.currentPlayingId = null;
+                this.cleanupCurrentUrl(); // Clean up on error
                 eventBus.publish('audio-state-changed', { 
                     id: id, 
                     isPlaying: false 
@@ -129,6 +143,9 @@ class AudioPlayerService {
             const pausedId = this.currentPlayingId;
             this.audioElement.pause();
             this.currentPlayingId = null;
+            
+            // Clean up URL when pausing
+            this.cleanupCurrentUrl();
             
             log('Audio playback paused.', 'info');
             eventBus.publish('audio-state-changed', { 
@@ -144,6 +161,9 @@ class AudioPlayerService {
             this.audioElement.pause();
             this.audioElement.currentTime = 0;
             this.currentPlayingId = null;
+            
+            // Clean up URL when stopping
+            this.cleanupCurrentUrl();
             
             eventBus.publish('audio-state-changed', { 
                 id: stoppedId, 
@@ -163,6 +183,13 @@ class AudioPlayerService {
     // Public method to get current playing ID
     getCurrentlyPlaying() {
         return this.currentPlayingId;
+    }
+
+    // FIXED: Add cleanup method for service shutdown
+    cleanup() {
+        this.stop();
+        this.cleanupCurrentUrl();
+        log('AudioPlayerService cleanup completed', 'info');
     }
 }
 

@@ -1,10 +1,8 @@
 // js/components/ui/audioPreview.js
-// Bulletproof audio preview with hybrid state management
+// Fixed: Added proper URL cleanup to prevent memory leaks
 
 import { eventBus } from '../../services/eventBus.js';
 import { audioPlayerService } from '../../services/audioPlayerService.js';
-
-
 
 class AudioPreview extends HTMLElement {
     static get observedAttributes() {
@@ -15,6 +13,7 @@ class AudioPreview extends HTMLElement {
         super();
         this.attachShadow({ mode: 'open' });
         this.audioBlob = null;
+        this.currentBlobUrl = null; // Track current blob URL for cleanup
         this.render();
         this.setupEventListeners();
         this.startStateSync();
@@ -446,9 +445,20 @@ class AudioPreview extends HTMLElement {
         }));
     }
 
-    // Public method to set audio data
+    // FIXED: Public method to set audio data with proper URL cleanup
     setAudioBlob(audioBlob) {
+        // Clean up old blob URL first
+        if (this.currentBlobUrl) {
+            URL.revokeObjectURL(this.currentBlobUrl);
+            this.currentBlobUrl = null;
+        }
+        
         this.audioBlob = audioBlob;
+        
+        // Create new blob URL if needed
+        if (audioBlob) {
+            this.currentBlobUrl = URL.createObjectURL(audioBlob);
+        }
     }
 
     // Public method to reset play button
@@ -464,6 +474,19 @@ class AudioPreview extends HTMLElement {
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = Math.floor(seconds % 60);
         return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+    }
+
+    // FIXED: Cleanup when component is removed from DOM
+    disconnectedCallback() {
+        // Clean up blob URL to prevent memory leaks
+        if (this.currentBlobUrl) {
+            URL.revokeObjectURL(this.currentBlobUrl);
+            this.currentBlobUrl = null;
+            console.log('AudioPreview: Cleaned up blob URL on disconnect');
+        }
+        
+        // Reset audio blob reference
+        this.audioBlob = null;
     }
 }
 

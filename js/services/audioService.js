@@ -1,5 +1,5 @@
-// js/services/AudioService.js
-// Extracted audio business logic from audioRecorder.js
+// js/services/audioService.js
+// Fixed: Added proper cleanup to prevent memory leaks
 
 import { log } from '../utils/log.js';
 
@@ -80,8 +80,10 @@ export class AudioService {
                 const mimeType = this.getSupportedMimeType();
                 const audioBlob = new Blob(this.audioChunks, { type: mimeType });
                 
-                // Clean up media stream
-                this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                // Clean up media stream immediately
+                if (this.mediaRecorder.stream) {
+                    this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                }
                 
                 log(`Recording stopped. Duration: ${duration}s, Size: ${audioBlob.size} bytes`, 'success');
                 
@@ -95,6 +97,7 @@ export class AudioService {
 
             this.mediaRecorder.onerror = (error) => {
                 log(`Recording error: ${error.message}`, 'error');
+                this.cleanup(); // Clean up on error
                 reject(error);
             };
 
@@ -170,16 +173,27 @@ export class AudioService {
     async getAudioDuration(audioBlob) {
         return new Promise((resolve) => {
             const audio = new Audio();
+            let tempUrl = null;
+            
             audio.onloadedmetadata = () => {
                 const duration = audio.duration || 0;
-                URL.revokeObjectURL(audio.src);
+                // Clean up immediately after getting duration
+                if (tempUrl) {
+                    URL.revokeObjectURL(tempUrl);
+                }
                 resolve(duration);
             };
+            
             audio.onerror = () => {
-                URL.revokeObjectURL(audio.src);
+                // Clean up on error too
+                if (tempUrl) {
+                    URL.revokeObjectURL(tempUrl);
+                }
                 resolve(0);
             };
-            audio.src = URL.createObjectURL(audioBlob);
+            
+            tempUrl = URL.createObjectURL(audioBlob);
+            audio.src = tempUrl;
         });
     }
 
@@ -230,14 +244,30 @@ export class AudioService {
     }
 
     /**
-     * Clean up resources
+     * Clean up resources - FIXED: Proper memory cleanup
      */
     cleanup() {
-        if (this.mediaRecorder && this.mediaRecorder.stream) {
-            this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        // Stop and clean up media recorder
+        if (this.mediaRecorder) {
+            if (this.mediaRecorder.state === 'recording') {
+                this.mediaRecorder.stop();
+            }
+            
+            // Clean up media stream
+            if (this.mediaRecorder.stream) {
+                this.mediaRecorder.stream.getTracks().forEach(track => {
+                    track.stop();
+                    log('Audio track stopped', 'info');
+                });
+            }
+            
+            this.mediaRecorder = null;
         }
-        this.mediaRecorder = null;
+        
+        // Clear audio chunks array
         this.audioChunks = [];
         this.recordingStartTime = null;
+        
+        log('AudioService cleanup completed', 'info');
     }
 }
