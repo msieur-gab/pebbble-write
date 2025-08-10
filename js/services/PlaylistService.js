@@ -13,86 +13,126 @@ export class PlaylistService {
     }
 
     /**
-     * Initialize service with playlist data
-     * @param {Object|null} playlist - Playlist to load, null for new playlist
+     * Load playlist data by ID
+     * @param {number|null} playlistId - Playlist ID or null for new playlist
+     * @returns {Promise<Object>} Playlist data
      */
-    async initialize(playlist = null) {
-        if (playlist) {
-            this.currentPlaylist = playlist;
-            this.currentPlaylistClips = await this.db.getAudioClipsForPlaylist(playlist.id);
-            log(`Loaded playlist "${playlist.name}" with ${this.currentPlaylistClips.length} clips`, 'info');
-        } else {
-            this.currentPlaylist = null;
-            this.currentPlaylistClips = [];
-            log('Initialized new playlist', 'info');
-        }
+    async loadPlaylist(playlistId = null) {
+        try {
+            if (playlistId) {
+                const playlist = await this.db.getPlaylistById(playlistId);
+                this.currentPlaylist = playlist;
+                this.currentPlaylistClips = await this.db.getAudioClipsForPlaylist(playlistId);
+            } else {
+                this.currentPlaylist = null;
+                this.currentPlaylistClips = [];
+            }
 
-        // Always load all available clips
-        this.allAvailableClips = await this.db.getAllAudioClips();
-        log(`Loaded ${this.allAvailableClips.length} available clips`, 'info');
-        
-        this.notifyChange();
+            // Always load available clips
+            this.allAvailableClips = await this.db.getAllAudioClips();
+
+            log(`Playlist loaded: ${playlistId ? `"${this.currentPlaylist.name}"` : 'new playlist'}`, 'info');
+            
+            return {
+                playlist: this.currentPlaylist,
+                clips: this.currentPlaylistClips,
+                availableClips: this.getAvailableClips()
+            };
+
+        } catch (error) {
+            log(`Failed to load playlist: ${error.message}`, 'error');
+            throw new Error(`Could not load playlist: ${error.message}`);
+        }
     }
 
     /**
-     * Add a new audio clip to the current playlist
-     * @param {Object} audioData - Audio data from recording/upload
-     * @returns {Promise<Object>} Saved clip data
+     * Save playlist to database
+     * @param {Object} playlistData - Playlist information
+     * @returns {Promise<Object>} Saved playlist
      */
-    async addNewAudioClip(audioData) {
+    async savePlaylist(playlistData) {
         try {
-            const { title, audioBlob, duration } = audioData;
-            
-            // Save to database
-            const clipId = await this.db.saveAudioClip(title, audioBlob, duration);
-            const savedClip = { 
-                id: clipId, 
-                title: title, 
-                audioBlob: audioBlob, 
-                duration: duration,
+            const validation = this.validatePlaylist(playlistData);
+            if (!validation.valid) {
+                throw new Error(validation.error);
+            }
+
+            const playlist = {
+                name: playlistData.name.trim(),
+                description: playlistData.description?.trim() || '',
+                audioClipIds: this.currentPlaylistClips.map(clip => clip.id),
                 timestamp: Date.now()
             };
+
+            // Update existing or create new
+            if (playlistData.id) {
+                playlist.id = playlistData.id;
+                await this.db.savePlaylist(playlist);
+                this.currentPlaylist = playlist;
+            } else {
+                const newPlaylistId = await this.db.savePlaylist(playlist);
+                this.currentPlaylist = { ...playlist, id: newPlaylistId };
+            }
+
+            log(`Playlist "${playlist.name}" saved successfully`, 'success');
             
-            // Add to current playlist
-            this.currentPlaylistClips.push(savedClip);
-            
-            // Add to available clips
-            this.allAvailableClips.push(savedClip);
-            
-            log(`Audio "${title}" added to playlist`, 'success');
-            this.notifyChange();
-            
-            return savedClip;
+            // Notify components of save
+            eventBus.publish('playlist-saved', {
+                playlist: this.currentPlaylist,
+                clips: this.currentPlaylistClips
+            });
+
+            return this.currentPlaylist;
+
         } catch (error) {
-            log(`Failed to save audio: ${error.message}`, 'error');
+            log(`Failed to save playlist: ${error.message}`, 'error');
             throw error;
         }
     }
 
     /**
-     * Add existing clip to current playlist
-     * @param {number} clipId - ID of clip to add
-     * @returns {Promise<boolean>} Success status
+     * Add audio clip to current playlist
+     * @param {Object} clipData - Audio clip data with ID
+     * @returns {Promise<void>}
      */
-    async addExistingClipToPlaylist(clipId) {
+    async addClipToPlaylist(clipData) {
         try {
-            const clipToAdd = await this.db.getAudioClip(clipId);
-            
-            if (!clipToAdd) {
-                throw new Error('Clip not found');
+            // If we have an ID, fetch from DB to get complete data
+            let clipToAdd;
+            if (clipData.id && !clipData.audioBlob) {
+                clipToAdd = await this.db.getAudioClip(clipData.id);
+                if (!clipToAdd) {
+                    throw new Error(`Clip with ID ${clipData.id} not found in database`);
+                }
+            } else {
+                clipToAdd = clipData;
             }
-            
-            // Check if already in playlist
-            if (this.currentPlaylistClips.some(clip => clip.id === clipId)) {
-                log(`Clip "${clipToAdd.title}" is already in playlist`, 'warning');
-                return false;
+
+            // Check if clip is already in playlist
+            if (this.currentPlaylistClips.some(clip => clip.id === clipToAdd.id)) {
+                log(`Clip "${clipToAdd.title}" is already in the playlist`, 'warning');
+                return;
             }
-            
+
+            // Add to current playlist
             this.currentPlaylistClips.push(clipToAdd);
-            log(`Clip "${clipToAdd.title}" added to playlist`, 'info');
-            this.notifyChange();
+
+            // Update available clips if not already there
+            if (!this.allAvailableClips.some(clip => clip.id === clipToAdd.id)) {
+                this.allAvailableClips.push(clipToAdd);
+            }
+
+            log(`Added "${clipToAdd.title}" to playlist`, 'success');
             
-            return true;
+            // Notify components of change
+            eventBus.publish('playlist-updated', {
+                action: 'clip-added',
+                clip: clipToAdd,
+                playlistClips: this.currentPlaylistClips,
+                availableClips: this.getAvailableClips(),
+                stats: this.getPlaylistStats()
+            });
+
         } catch (error) {
             log(`Failed to add clip to playlist: ${error.message}`, 'error');
             throw error;
@@ -102,98 +142,107 @@ export class PlaylistService {
     /**
      * Remove clip from current playlist
      * @param {number} clipId - ID of clip to remove
-     * @returns {boolean} Success status
      */
     removeClipFromPlaylist(clipId) {
         const clipIndex = this.currentPlaylistClips.findIndex(clip => clip.id === clipId);
         
         if (clipIndex === -1) {
-            log('Clip not found in playlist', 'warning');
-            return false;
+            log(`Clip with ID ${clipId} not found in playlist`, 'warning');
+            return;
         }
-        
+
         const removedClip = this.currentPlaylistClips[clipIndex];
         this.currentPlaylistClips.splice(clipIndex, 1);
+
+        log(`Removed "${removedClip.title}" from playlist`, 'info');
         
-        log(`Clip "${removedClip.title}" removed from playlist`, 'info');
-        this.notifyChange();
-        
-        return true;
+        // Notify components of change
+        eventBus.publish('playlist-updated', {
+            action: 'clip-removed',
+            clip: removedClip,
+            playlistClips: this.currentPlaylistClips,
+            availableClips: this.getAvailableClips(),
+            stats: this.getPlaylistStats()
+        });
     }
 
     /**
      * Reorder clips in playlist
-     * @param {Array<number>} newOrder - Array of clip IDs in new order
+     * @param {Array} newOrder - Array of clip IDs in new order
      */
     reorderPlaylistClips(newOrder) {
-        const reorderedClips = newOrder.map(id => 
-            this.currentPlaylistClips.find(clip => clip.id === id)
-        ).filter(Boolean);
-        
-        this.currentPlaylistClips = reorderedClips;
-        log('Playlist clips reordered', 'info');
-        this.notifyChange();
-    }
-
-    /**
-     * Save current playlist to database
-     * @param {Object} playlistData - Playlist metadata (name, description)
-     * @returns {Promise<Object>} Saved playlist
-     */
-    async savePlaylist(playlistData) {
         try {
-            const { name, description } = playlistData;
-            
-            // Validate playlist data
-            const validation = this.validatePlaylistData({ name, description });
-            if (!validation.valid) {
-                throw new Error(validation.error);
-            }
-            
-            const playlist = {
-                name: name.trim(),
-                description: description.trim(),
-                audioClipIds: this.currentPlaylistClips.map(clip => clip.id),
-                timestamp: Date.now()
-            };
+            const reorderedClips = newOrder.map(clipId => {
+                const clip = this.currentPlaylistClips.find(c => c.id === clipId);
+                if (!clip) {
+                    throw new Error(`Clip with ID ${clipId} not found`);
+                }
+                return clip;
+            });
 
-            // Update existing or create new
-            if (this.currentPlaylist?.id) {
-                playlist.id = this.currentPlaylist.id;
-            }
+            this.currentPlaylistClips = reorderedClips;
+            
+            log('Playlist clips reordered', 'info');
+            
+            eventBus.publish('playlist-updated', {
+                action: 'clips-reordered',
+                playlistClips: this.currentPlaylistClips,
+                stats: this.getPlaylistStats()
+            });
 
-            const savedPlaylist = await this.db.savePlaylist(playlist);
-            this.currentPlaylist = savedPlaylist;
-            
-            log(`Playlist "${name}" saved successfully`, 'success');
-            return savedPlaylist;
-            
         } catch (error) {
-            log(`Failed to save playlist: ${error.message}`, 'error');
+            log(`Failed to reorder clips: ${error.message}`, 'error');
             throw error;
         }
     }
 
     /**
+     * Get clips available to add to playlist (not already in it)
+     * @returns {Array} Available clips
+     */
+    getAvailableClips() {
+        return this.allAvailableClips.filter(clip => 
+            !this.currentPlaylistClips.some(playlistClip => playlistClip.id === clip.id)
+        );
+    }
+
+    /**
+     * Get current playlist statistics
+     * @returns {Object} Stats object
+     */
+    getPlaylistStats() {
+        const totalClips = this.currentPlaylistClips.length;
+        const totalDuration = this.currentPlaylistClips.reduce(
+            (sum, clip) => sum + (clip.duration || 0), 
+            0
+        );
+
+        return {
+            clipCount: totalClips,
+            totalDuration: totalDuration,
+            formattedDuration: this.formatDuration(totalDuration),
+            isEmpty: totalClips === 0
+        };
+    }
+
+    /**
      * Validate playlist data
-     * @param {Object} data - Playlist data to validate
+     * @param {Object} playlistData - Data to validate
      * @returns {Object} Validation result
      */
-    validatePlaylistData(data) {
-        const { name, description } = data;
-        
-        if (!name || name.trim().length === 0) {
+    validatePlaylist(playlistData) {
+        if (!playlistData.name || playlistData.name.trim().length === 0) {
             return { valid: false, error: 'Playlist name is required' };
         }
-        
-        if (name.trim().length > 100) {
+
+        if (playlistData.name.trim().length > 100) {
             return { valid: false, error: 'Playlist name must be less than 100 characters' };
         }
-        
-        if (description && description.length > 500) {
-            return { valid: false, error: 'Description must be less than 500 characters' };
+
+        if (this.currentPlaylistClips.length === 0) {
+            return { valid: false, error: 'Playlist must contain at least one audio clip' };
         }
-        
+
         return { valid: true };
     }
 
@@ -202,67 +251,33 @@ export class PlaylistService {
      * @returns {Object} Validation result
      */
     validateForFinalization() {
-        if (!this.currentPlaylist) {
-            return { valid: false, error: 'Please save the playlist before finalizing' };
+        if (!this.currentPlaylist || !this.currentPlaylist.name) {
+            return { valid: false, error: 'Please set a playlist name before finalizing' };
         }
-        
+
         if (this.currentPlaylistClips.length === 0) {
             return { valid: false, error: 'Cannot finalize an empty playlist. Please add some audio clips.' };
         }
-        
-        // Check for clips without audio data
-        const invalidClips = this.currentPlaylistClips.filter(clip => !clip.audioBlob);
-        if (invalidClips.length > 0) {
-            return { 
-                valid: false, 
-                error: `Some clips are missing audio data: ${invalidClips.map(c => c.title).join(', ')}` 
-            };
-        }
-        
+
         return { valid: true };
     }
 
     /**
-     * Get available clips (not in current playlist)
-     * @returns {Array} Available clips
-     */
-    getAvailableClips() {
-        return this.allAvailableClips.filter(clip => 
-            !this.currentPlaylistClips.some(c => c.id === clip.id)
-        );
-    }
-
-    /**
-     * Get current playlist data for finalization
-     * @returns {Object} Playlist data ready for finalization
+     * Get playlist data ready for finalization
+     * @returns {Object} Finalization data
      */
     getFinalizationData() {
+        const validation = this.validateForFinalization();
+        if (!validation.valid) {
+            throw new Error(validation.error);
+        }
+
         return {
             clips: this.currentPlaylistClips,
-            name: this.currentPlaylist?.name || 'Untitled Playlist',
+            name: this.currentPlaylist.name,
             id: this.currentPlaylist?.id || null,
-            audioClipIds: this.currentPlaylistClips.map(clip => clip.id)
-        };
-    }
-
-    /**
-     * Get playlist statistics
-     * @returns {Object} Playlist stats
-     */
-    getPlaylistStats() {
-        const totalDuration = this.currentPlaylistClips.reduce(
-            (sum, clip) => sum + (clip.duration || 0), 0
-        );
-        
-        const totalSize = this.currentPlaylistClips.reduce(
-            (sum, clip) => sum + (clip.audioBlob?.size || 0), 0
-        );
-        
-        return {
-            clipCount: this.currentPlaylistClips.length,
-            totalDuration: totalDuration,
-            totalSize: totalSize,
-            averageDuration: this.currentPlaylistClips.length > 0 ? totalDuration / this.currentPlaylistClips.length : 0
+            description: this.currentPlaylist?.description || '',
+            stats: this.getPlaylistStats()
         };
     }
 
@@ -275,57 +290,62 @@ export class PlaylistService {
         if (isNaN(seconds) || seconds === Infinity || !seconds) {
             return '0:00';
         }
-        const minutes = Math.floor(seconds / 60);
+        
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
         const remainingSeconds = Math.floor(seconds % 60);
-        return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+        
+        if (hours > 0) {
+            return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+        } else {
+            return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+        }
     }
 
     /**
      * Refresh available clips from database
      */
     async refreshAvailableClips() {
-        this.allAvailableClips = await this.db.getAllAudioClips();
-        log(`Refreshed available clips: ${this.allAvailableClips.length} total`, 'info');
-        this.notifyChange();
+        try {
+            this.allAvailableClips = await this.db.getAllAudioClips();
+            
+            eventBus.publish('playlist-updated', {
+                action: 'available-clips-refreshed',
+                availableClips: this.getAvailableClips()
+            });
+            
+        } catch (error) {
+            log(`Failed to refresh available clips: ${error.message}`, 'error');
+        }
     }
 
     /**
-     * Get current state
-     * @returns {Object} Current service state
-     */
-    getState() {
-        return {
-            currentPlaylist: this.currentPlaylist,
-            currentPlaylistClips: this.currentPlaylistClips,
-            availableClips: this.getAvailableClips(),
-            stats: this.getPlaylistStats()
-        };
-    }
-
-    /**
-     * Clear current playlist (start fresh)
+     * Clear current playlist data
      */
     clearPlaylist() {
         this.currentPlaylist = null;
         this.currentPlaylistClips = [];
-        log('Playlist cleared - starting fresh', 'info');
-        this.notifyChange();
+        
+        eventBus.publish('playlist-updated', {
+            action: 'playlist-cleared',
+            playlistClips: [],
+            availableClips: this.getAvailableClips(),
+            stats: this.getPlaylistStats()
+        });
+        
+        log('Playlist cleared', 'info');
     }
 
     /**
-     * Notify components of state changes
-     * @private
+     * Get current state
+     * @returns {Object} Current state
      */
-    notifyChange() {
-        eventBus.publish('playlist-state-changed', this.getState());
-    }
-
-    /**
-     * Cleanup resources
-     */
-    cleanup() {
-        this.currentPlaylist = null;
-        this.currentPlaylistClips = [];
-        this.allAvailableClips = [];
+    getCurrentState() {
+        return {
+            playlist: this.currentPlaylist,
+            clips: this.currentPlaylistClips,
+            availableClips: this.getAvailableClips(),
+            stats: this.getPlaylistStats()
+        };
     }
 }

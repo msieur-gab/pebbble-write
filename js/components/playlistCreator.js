@@ -1,9 +1,10 @@
 // js/components/playlistCreator.js
-// Updated to use 'audio-saved' event and avoid duplicate saving
+// Refactored to use PlaylistService for business logic
 
 import { log } from '../utils/log.js';
 import { eventBus } from '../services/eventBus.js';
 import { MessageDb } from '../services/messageDb.js';
+import { PlaylistService } from '../services/PlaylistService.js';
 import { audioPlayerService } from '../services/audioPlayerService.js';
 import './audioRecorder.js';
 import './ui/audioPreview.js';
@@ -12,29 +13,26 @@ class PlaylistCreator extends HTMLElement {
     constructor() {
         super();
         this.attachShadow({ mode: 'open' });
+        
+        // Initialize services
         this.db = new MessageDb();
-        this.currentPlaylistId = null;
-        this.currentPlaylistClips = [];
-        this.allAvailableClips = [];
+        this.playlistService = new PlaylistService(this.db);
 
         this.render();
         this.setupEventListeners();
     }
     
     async setPlaylistData(playlist) {
-        this.currentPlaylistId = playlist?.id || null;
-        this.shadowRoot.querySelector('#playlistTitle').value = playlist?.name || '';
-        this.shadowRoot.querySelector('#playlistDescription').value = playlist?.description || '';
-        
-        if (playlist) {
-            this.currentPlaylistClips = await this.db.getAudioClipsForPlaylist(playlist.id);
-        } else {
-            this.currentPlaylistClips = [];
+        try {
+            // Load playlist through service
+            const playlistData = await this.playlistService.loadPlaylist(playlist?.id || null);
+            
+            // Update UI with loaded data
+            this.updateUI(playlistData);
+            
+        } catch (error) {
+            log(`Failed to load playlist data: ${error.message}`, 'error');
         }
-
-        this.allAvailableClips = await this.db.getAllAudioClips();
-        this.renderClips();
-        this.renderAvailableClips();
     }
 
     render() {
@@ -153,6 +151,54 @@ class PlaylistCreator extends HTMLElement {
     setupEventListeners() {
         // Playlist actions
         this.shadowRoot.querySelector('#savePlaylistBtn').addEventListener('click', () => {
+            this.handleSavePlaylist();
+        });
+        
+        this.shadowRoot.querySelector('#backToHomeBtn').addEventListener('click', () => {
+            eventBus.publish('back-to-home');
+        });
+        
+        this.shadowRoot.querySelector('#finalizePlaylistBtn').addEventListener('click', () => {
+            this.handleFinalizePlaylist();
+        });
+        
+        // Listen for remove events from audio-preview components
+        this.shadowRoot.addEventListener('clip-remove', (e) => {
+            const clipId = parseInt(e.detail.clipId);
+            this.playlistService.removeClipFromPlaylist(clipId);
+        });
+        
+        // Handle clicks on available clips
+        this.shadowRoot.querySelector('#available-clips-container').addEventListener('click', (e) => {
+            if (e.target.closest('.clip-card')) {
+                const clipId = parseInt(e.target.closest('.clip-card').dataset.id);
+                this.playlistService.addClipToPlaylist({ id: clipId });
+            }
+        });
+        
+        // Listen for new audio from recorder (already saved by audioRecorder)
+        eventBus.subscribe('audio-saved', (audioData) => {
+            this.playlistService.addClipToPlaylist(audioData);
+        });
+
+        // Listen for playlist updates from service
+        eventBus.subscribe('playlist-updated', (updateData) => {
+            this.handlePlaylistUpdate(updateData);
+        });
+
+        // Listen for playlist save success
+        eventBus.subscribe('playlist-saved', (data) => {
+            // Update UI to reflect saved state
+            this.updateUI({
+                playlist: data.playlist,
+                clips: data.clips,
+                availableClips: this.playlistService.getAvailableClips()
+            });
+        });
+    }
+    
+    async handleSavePlaylist() {
+        try {
             const playlistTitle = this.shadowRoot.querySelector('#playlistTitle').value.trim();
             const playlistDescription = this.shadowRoot.querySelector('#playlistDescription').value.trim();
             
@@ -161,106 +207,85 @@ class PlaylistCreator extends HTMLElement {
                 return;
             }
             
-            const audioClipIds = this.currentPlaylistClips.map(clip => clip.id);
-            eventBus.publish('save-playlist-requested', { 
-                id: this.currentPlaylistId, 
-                name: playlistTitle, 
-                description: playlistDescription,
-                audioClipIds: audioClipIds
-            });
-        });
-        
-        this.shadowRoot.querySelector('#backToHomeBtn').addEventListener('click', () => {
-            eventBus.publish('back-to-home');
-        });
-        
-        this.shadowRoot.querySelector('#finalizePlaylistBtn').addEventListener('click', () => {
-            const playlistTitle = this.shadowRoot.querySelector('#playlistTitle').value.trim();
-            if (!playlistTitle) {
-                log('Please enter a playlist title before finalizing.', 'warning');
-                return;
-            }
-            if (this.currentPlaylistClips.length === 0) {
-                log('Please add some audio clips before finalizing.', 'warning');
-                return;
-            }
-            eventBus.publish('finalize-playlist-requested');
-        });
-        
-        // Listen for remove events from audio-preview components
-        this.shadowRoot.addEventListener('clip-remove', (e) => {
-            const clipId = parseInt(e.detail.clipId);
-            this.removeClipFromPlaylist(clipId);
-        });
-        
-        // Handle clicks on available clips
-        this.shadowRoot.querySelector('#available-clips-container').addEventListener('click', (e) => {
-            if (e.target.closest('.clip-card')) {
-                const clipId = parseInt(e.target.closest('.clip-card').dataset.id);
-                this.addClipToPlaylist(clipId);
-            }
-        });
-        
-        // Listen for new audio from shared recorder (FIXED: no duplicate saving)
-        eventBus.subscribe('audio-saved', (audioData) => {
-            this.handleNewAudio(audioData);
-        });
-    }
-    
-    async handleNewAudio(audioData) {
-        try {
-            // Audio is already saved to DB by audioRecorder, just use the data
-            const { id, title, audioBlob, duration } = audioData;
-            const savedClip = { 
-                id: id, 
-                title: title, 
-                audioBlob: audioBlob, 
-                duration: duration 
+            const playlistData = {
+                id: this.playlistService.currentPlaylist?.id || null,
+                name: playlistTitle,
+                description: playlistDescription
             };
+
+            await this.playlistService.savePlaylist(playlistData);
             
-            // Add to current playlist and available clips
-            this.currentPlaylistClips.push(savedClip);
-            this.allAvailableClips.push(savedClip);
+            // Navigate back to home after successful save
+            eventBus.publish('back-to-home');
             
-            log(`Audio "${title}" added to playlist.`, 'success');
-            
-            // Refresh UI
-            this.renderClips();
-            this.renderAvailableClips();
-            
-        } catch (err) { 
-            log(`Failed to add audio to playlist: ${err.message}`, 'error'); 
-        }
-    }
-    
-    async addClipToPlaylist(clipId) {
-        const clipToAdd = await this.db.getAudioClip(clipId);
-        if (clipToAdd && !this.currentPlaylistClips.some(clip => clip.id === clipId)) {
-            this.currentPlaylistClips.push(clipToAdd);
-            this.renderClips();
-            this.renderAvailableClips();
-            log(`Clip "${clipToAdd.title}" added to playlist.`, 'info');
-        }
-    }
-    
-    removeClipFromPlaylist(id) {
-        const clipIndex = this.currentPlaylistClips.findIndex(clip => clip.id === id);
-        if (clipIndex > -1) {
-            const removedClip = this.currentPlaylistClips[clipIndex];
-            this.currentPlaylistClips.splice(clipIndex, 1);
-            this.renderClips();
-            this.renderAvailableClips();
-            log(`Clip "${removedClip.title}" removed from playlist.`, 'info');
+        } catch (error) {
+            log(`Failed to save playlist: ${error.message}`, 'error');
         }
     }
 
-    async renderAvailableClips() {
+    handleFinalizePlaylist() {
+        try {
+            const playlistTitle = this.shadowRoot.querySelector('#playlistTitle').value.trim();
+            
+            // Update current playlist name if changed
+            if (this.playlistService.currentPlaylist) {
+                this.playlistService.currentPlaylist.name = playlistTitle;
+            } else {
+                this.playlistService.currentPlaylist = { name: playlistTitle };
+            }
+            
+            // Get finalization data from service
+            const finalizationData = this.playlistService.getFinalizationData();
+            
+            // Publish finalization request
+            eventBus.publish('finalize-playlist-requested', finalizationData);
+            
+        } catch (error) {
+            log(`Cannot finalize playlist: ${error.message}`, 'warning');
+        }
+    }
+
+    handlePlaylistUpdate(updateData) {
+        // Re-render components that changed
+        if (updateData.playlistClips !== undefined) {
+            this.renderClips(updateData.playlistClips, updateData.stats);
+        }
+        
+        if (updateData.availableClips !== undefined) {
+            this.renderAvailableClips(updateData.availableClips);
+        }
+
+        // Log the action for user feedback
+        switch (updateData.action) {
+            case 'clip-added':
+                log(`"${updateData.clip.title}" added to playlist`, 'success');
+                break;
+            case 'clip-removed':
+                log(`"${updateData.clip.title}" removed from playlist`, 'info');
+                break;
+            case 'clips-reordered':
+                log('Playlist clips reordered', 'info');
+                break;
+        }
+    }
+
+    updateUI(playlistData) {
+        const { playlist, clips, availableClips } = playlistData;
+        
+        // Update form fields
+        this.shadowRoot.querySelector('#playlistTitle').value = playlist?.name || '';
+        this.shadowRoot.querySelector('#playlistDescription').value = playlist?.description || '';
+        
+        // Update displays
+        this.renderClips(clips, this.playlistService.getPlaylistStats());
+        this.renderAvailableClips(availableClips);
+        
+        log(`UI updated for ${playlist ? `"${playlist.name}"` : 'new playlist'}`, 'info');
+    }
+
+    renderAvailableClips(availableClips) {
         const container = this.shadowRoot.querySelector('#available-clips-container');
         container.innerHTML = '';
-
-        const availableClips = this.allAvailableClips.filter(clip => 
-            !this.currentPlaylistClips.some(c => c.id === clip.id)
-        );
 
         if (availableClips.length === 0) {
             container.innerHTML = '<div class="empty-state">No available clips. Create some audio clips first!</div>';
@@ -276,7 +301,7 @@ class PlaylistCreator extends HTMLElement {
             const audioPreview = document.createElement('audio-preview');
             audioPreview.setAttribute('clip-id', clip.id.toString());
             audioPreview.setAttribute('title', clip.title);
-            audioPreview.setAttribute('duration', this.formatDuration(clip.duration));
+            audioPreview.setAttribute('duration', this.playlistService.formatDuration(clip.duration));
             audioPreview.setAttribute('layout', 'compact');
             audioPreview.setAudioBlob(clip.audioBlob);
             
@@ -287,54 +312,53 @@ class PlaylistCreator extends HTMLElement {
         });
     }
 
-    formatDuration(seconds) {
-        if (isNaN(seconds) || seconds === Infinity || !seconds) {
-            return '0:00';
-        }
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = Math.floor(seconds % 60);
-        return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
-    }
-
-    async renderClips() {
+    renderClips(clips, stats) {
         const container = this.shadowRoot.querySelector('#clips-container');
         const headerEl = this.shadowRoot.querySelector('#clips-header');
+        const statsEl = this.shadowRoot.querySelector('#playlist-stats .stats-text');
         
         container.innerHTML = '';
-        headerEl.textContent = `Playlist Clips (${this.currentPlaylistClips.length})`;
+        headerEl.textContent = `Playlist Clips (${clips.length})`;
 
-        // Update playlist stats
-        this.updatePlaylistStats();
+        // Update stats
+        if (stats.isEmpty) {
+            statsEl.textContent = 'No clips yet';
+        } else {
+            statsEl.textContent = `${stats.clipCount} clip${stats.clipCount === 1 ? '' : 's'} • Total duration: ${stats.formattedDuration}`;
+        }
 
-        if (this.currentPlaylistClips.length === 0) {
+        if (clips.length === 0) {
             container.innerHTML = '<div class="empty-state">No clips in playlist yet. Add some audio clips!</div>';
             return;
         }
 
-        for (const clip of this.currentPlaylistClips) {
+        clips.forEach(clip => {
             // Create audio preview component for playlist clips
             const audioPreview = document.createElement('audio-preview');
             audioPreview.setAttribute('clip-id', clip.id.toString());
             audioPreview.setAttribute('title', clip.title);
-            audioPreview.setAttribute('duration', this.formatDuration(clip.duration));
+            audioPreview.setAttribute('duration', this.playlistService.formatDuration(clip.duration));
             audioPreview.setAttribute('layout', 'playlist');
             audioPreview.setAudioBlob(clip.audioBlob);
             
             container.appendChild(audioPreview);
-        }
+        });
     }
 
-    updatePlaylistStats() {
-        const statsEl = this.shadowRoot.querySelector('#playlist-stats .stats-text');
-        const totalClips = this.currentPlaylistClips.length;
-        const totalDuration = this.currentPlaylistClips.reduce((sum, clip) => sum + (clip.duration || 0), 0);
-        
-        if (totalClips === 0) {
-            statsEl.textContent = 'No clips yet';
-        } else {
-            const totalDurationText = this.formatDuration(totalDuration);
-            statsEl.textContent = `${totalClips} clip${totalClips === 1 ? '' : 's'} • Total duration: ${totalDurationText}`;
-        }
+    // Public API for mainApp.js
+    async loadPlaylist(playlist) {
+        await this.setPlaylistData(playlist);
+    }
+
+    // Get current playlist data for finalization
+    getPlaylistData() {
+        return this.playlistService.getCurrentState();
+    }
+
+    // Cleanup when component is removed
+    disconnectedCallback() {
+        // Clear playlist service state
+        this.playlistService.clearPlaylist();
     }
 }
 

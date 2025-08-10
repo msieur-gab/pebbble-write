@@ -99,8 +99,8 @@ class MainApp extends HTMLElement {
             this.handleSavePlaylist(data);
         });
         
-        eventBus.subscribe('finalize-playlist-requested', () => {
-            this.handleFinalizationRequest();
+        eventBus.subscribe('finalize-playlist-requested', (finalizationData) => {
+            this.handleFinalizationRequest(finalizationData);
         });
 
         // Modal events
@@ -276,20 +276,13 @@ class MainApp extends HTMLElement {
         }
     }
 
-    async handleFinalizationRequest() {
-        const playlistCreator = this.shadowRoot.querySelector('#playlistCreator');
-        
-        const playlistData = {
-            clips: playlistCreator.currentPlaylistClips,
-            name: playlistCreator.shadowRoot.querySelector('#playlistTitle').value,
-            id: playlistCreator.currentPlaylistId
-        };
-
+    async handleFinalizationRequest(finalizationData) {
+        // Data now comes from the event (from PlaylistService)
         appState.navigateTo('playlistFinalization');
         
         const finalizationComponent = this.shadowRoot.querySelector('#playlistFinalization');
         finalizationComponent.reset();
-        finalizationComponent.startFinalization(playlistData, this.storageService);
+        finalizationComponent.startFinalization(finalizationData, this.storageService);
     }
 }
 
