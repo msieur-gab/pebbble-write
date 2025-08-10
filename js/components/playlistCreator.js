@@ -4,7 +4,7 @@
 import { log } from '../utils/log.js';
 import { eventBus } from '../services/eventBus.js';
 import { MessageDb } from '../services/messageDb.js';
-import { PlaylistService } from '../services/PlaylistService.js';
+import { PlaylistService } from '../services/playlistService.js';
 import { audioPlayerService } from '../services/audioPlayerService.js';
 import './audioRecorder.js';
 import './ui/audioPreview.js';

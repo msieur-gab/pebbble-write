@@ -3,7 +3,7 @@
 
 import { log } from '../utils/log.js';
 import { eventBus } from '../services/eventBus.js';
-import { AudioService } from '../services/AudioService.js';
+import { AudioService } from '../services/audioService.js';
 import { MessageDb } from '../services/messageDb.js';
 import './ui/audioPreview.js';
 
