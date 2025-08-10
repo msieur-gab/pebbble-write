@@ -143,8 +143,67 @@ export class AudioService {
     }
 
     /**
-     * Process uploaded audio file
-     * @param {File} file - Audio file to process
+     * Test if current device can play specific audio format
+     * @param {string} mimeType - MIME type to test
+     * @returns {boolean} True if playback supported
+     */
+    canPlayFormat(mimeType) {
+        const audio = new Audio();
+        const canPlay = audio.canPlayType(mimeType);
+        
+        // canPlayType returns: "", "maybe", or "probably"
+        const isSupported = canPlay === "probably" || canPlay === "maybe";
+        log(`Playback test: ${mimeType} - ${canPlay || 'not supported'} (${isSupported ? 'OK' : 'FAIL'})`, 'info');
+        
+        return isSupported;
+    }
+
+    /**
+     * Get the best universal format for both recording AND playback
+     * @returns {Object} Format info with recording and playback compatibility
+     */
+    getBestUniversalFormat() {
+        const formats = [
+            { mime: 'audio/mp4', name: 'MP4/AAC' },
+            { mime: 'audio/mp4;codecs=mp4a.40.2', name: 'MP4/AAC (explicit)' },
+            { mime: 'audio/webm;codecs=opus', name: 'WebM/Opus' },
+            { mime: 'audio/webm', name: 'WebM' },
+            { mime: 'audio/ogg;codecs=opus', name: 'OGG/Opus' }
+        ];
+
+        for (const format of formats) {
+            const canRecord = MediaRecorder.isTypeSupported(format.mime);
+            const canPlay = this.canPlayFormat(format.mime);
+            
+            log(`Format test: ${format.name} - Record: ${canRecord ? '✅' : '❌'}, Play: ${canPlay ? '✅' : '❌'}`, 'info');
+            
+            if (canRecord && canPlay) {
+                log(`🎯 Best universal format: ${format.name}`, 'success');
+                return {
+                    mimeType: format.mime,
+                    name: format.name,
+                    canRecord: true,
+                    canPlay: true
+                };
+            }
+        }
+
+        // If no format works for both, find best recording format
+        const recordingFormat = formats.find(f => MediaRecorder.isTypeSupported(f.mime));
+        if (recordingFormat) {
+            log(`⚠️ Using recording format with limited playback: ${recordingFormat.name}`, 'warning');
+            return {
+                mimeType: recordingFormat.mime,
+                name: recordingFormat.name,
+                canRecord: true,
+                canPlay: this.canPlayFormat(recordingFormat.mime)
+            };
+        }
+
+        throw new Error('No compatible audio formats found for this device');
+    }
+
+     /* @param {File} file - Audio file to process
      * @returns {Promise<Object>} Processed audio data
      */
     async processUploadedFile(file) {
