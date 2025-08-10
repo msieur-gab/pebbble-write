@@ -1,4 +1,5 @@
 // js/components/playlistCreator.js
+// Updated to use 'audio-saved' event and avoid duplicate saving
 
 import { log } from '../utils/log.js';
 import { eventBus } from '../services/eventBus.js';
@@ -88,6 +89,19 @@ class PlaylistCreator extends HTMLElement {
                     font-style: italic;
                     padding: 2rem;
                 }
+                
+                .playlist-stats {
+                    background: #f0f9ff;
+                    border: 1px solid #e0f2fe;
+                    border-radius: 0.5rem;
+                    padding: 0.5rem 1rem;
+                }
+                
+                .stats-text {
+                    color: var(--secondary-color);
+                    font-size: 0.875rem;
+                    font-weight: 500;
+                }
             </style>
             
             <div class="playlist-creator">
@@ -100,15 +114,14 @@ class PlaylistCreator extends HTMLElement {
                     </div>
                 </div>
 
-                <!-- Add New Audio Section -->
-                <div class="section">
-                    <h3>Add New Audio</h3>
-                    <audio-recorder id="audio-recorder"></audio-recorder>
-                </div>
-                
                 <!-- Current Clips Section -->
                 <div class="section">
-                    <h3 id="clips-header">Playlist Clips (0)</h3>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3 id="clips-header">Playlist Clips (0)</h3>
+                        <div class="playlist-stats" id="playlist-stats">
+                            <span class="stats-text">No clips yet</span>
+                        </div>
+                    </div>
                     <div id="clips-container"></div>
                 </div>
 
@@ -117,6 +130,12 @@ class PlaylistCreator extends HTMLElement {
                     <h3>Add from Library</h3>
                     <p>Click any clip to add it to your playlist:</p>
                     <div id="available-clips-container" class="available-clips-container"></div>
+                </div>
+
+                <!-- Add New Audio Section -->
+                <div class="section">
+                    <h3>Add New Audio</h3>
+                    <audio-recorder id="audio-recorder"></audio-recorder>
                 </div>
 
                 <!-- Actions Section -->
@@ -182,20 +201,18 @@ class PlaylistCreator extends HTMLElement {
             }
         });
         
-        // Listen for new audio from shared recorder
-        eventBus.subscribe('audio-recorded', (audioData) => {
+        // Listen for new audio from shared recorder (FIXED: no duplicate saving)
+        eventBus.subscribe('audio-saved', (audioData) => {
             this.handleNewAudio(audioData);
         });
     }
     
     async handleNewAudio(audioData) {
         try {
-            const { title, audioBlob, duration } = audioData;
-            
-            // Save to database
-            const clipId = await this.db.saveAudioClip(title, audioBlob, duration);
+            // Audio is already saved to DB by audioRecorder, just use the data
+            const { id, title, audioBlob, duration } = audioData;
             const savedClip = { 
-                id: clipId, 
+                id: id, 
                 title: title, 
                 audioBlob: audioBlob, 
                 duration: duration 
@@ -212,7 +229,7 @@ class PlaylistCreator extends HTMLElement {
             this.renderAvailableClips();
             
         } catch (err) { 
-            log(`Failed to save audio: ${err.message}`, 'error'); 
+            log(`Failed to add audio to playlist: ${err.message}`, 'error'); 
         }
     }
     
@@ -286,6 +303,9 @@ class PlaylistCreator extends HTMLElement {
         container.innerHTML = '';
         headerEl.textContent = `Playlist Clips (${this.currentPlaylistClips.length})`;
 
+        // Update playlist stats
+        this.updatePlaylistStats();
+
         if (this.currentPlaylistClips.length === 0) {
             container.innerHTML = '<div class="empty-state">No clips in playlist yet. Add some audio clips!</div>';
             return;
@@ -301,6 +321,19 @@ class PlaylistCreator extends HTMLElement {
             audioPreview.setAudioBlob(clip.audioBlob);
             
             container.appendChild(audioPreview);
+        }
+    }
+
+    updatePlaylistStats() {
+        const statsEl = this.shadowRoot.querySelector('#playlist-stats .stats-text');
+        const totalClips = this.currentPlaylistClips.length;
+        const totalDuration = this.currentPlaylistClips.reduce((sum, clip) => sum + (clip.duration || 0), 0);
+        
+        if (totalClips === 0) {
+            statsEl.textContent = 'No clips yet';
+        } else {
+            const totalDurationText = this.formatDuration(totalDuration);
+            statsEl.textContent = `${totalClips} clip${totalClips === 1 ? '' : 's'} • Total duration: ${totalDurationText}`;
         }
     }
 }

@@ -4,6 +4,7 @@
 import { log } from '../utils/log.js';
 import { eventBus } from '../services/eventBus.js';
 import { AudioService } from '../services/AudioService.js';
+import { MessageDb } from '../services/messageDb.js';
 import './ui/audioPreview.js';
 
 class AudioRecorder extends HTMLElement {
@@ -17,8 +18,9 @@ class AudioRecorder extends HTMLElement {
         this.recordingInterval = null;
         this.previewId = null;
         
-        // Service dependency
+        // Service dependencies
         this.audioService = new AudioService();
+        this.db = new MessageDb();
         
         this.render();
         this.setupEventListeners();
@@ -255,14 +257,24 @@ class AudioRecorder extends HTMLElement {
         
         const title = this.shadowRoot.querySelector('#audio-title-input').value.trim() || 'Untitled Audio';
         
-        eventBus.publish('audio-recorded', {
-            title: title,
-            audioBlob: this.currentAudioBlob,
-            duration: this.currentAudioDuration
-        });
-        
-        log(`Audio "${title}" ready to save.`, 'success');
-        this.resetRecorder();
+        try {
+            // Save to database here (single source of truth)
+            const clipId = await this.db.saveAudioClip(title, this.currentAudioBlob, this.currentAudioDuration);
+            
+            // Publish event with saved clip data including ID
+            eventBus.publish('audio-saved', {
+                id: clipId,
+                title: title,
+                audioBlob: this.currentAudioBlob,
+                duration: this.currentAudioDuration
+            });
+            
+            log(`Audio "${title}" saved to library.`, 'success');
+            this.resetRecorder();
+            
+        } catch (error) {
+            log(`Failed to save audio: ${error.message}`, 'error');
+        }
     }
 
     resetRecorder() {
