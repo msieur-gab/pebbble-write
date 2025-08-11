@@ -18,7 +18,7 @@
  */
 export const config = {
     // General Settings
-    DEBUG_MODE: false,
+    DEBUG_MODE: true,
 
     // NFC URL Settings
     FORCE_NFC_URL_BASE: 'https://msieur-gab.github.io/peeble/kid.html',

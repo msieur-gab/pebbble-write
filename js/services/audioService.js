@@ -8,6 +8,7 @@ export class AudioService {
         this.mediaRecorder = null;
         this.audioChunks = [];
         this.recordingStartTime = null;
+        this.wakeLock = null;
     }
 
     /**
