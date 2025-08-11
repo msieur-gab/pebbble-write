@@ -27,12 +27,33 @@ export class AudioService {
         return supported;
     }
 
+    async requestWakeLock() {
+        if ('wakeLock' in navigator) {
+            try {
+                this.wakeLock = await navigator.wakeLock.request('screen');
+                log('Screen wake lock activated for recording', 'info');
+            } catch (error) {
+                log(`Wake lock failed: ${error.message}`, 'warning');
+                // Continue without wake lock - not critical
+            }
+        }
+    }
+
+    releaseWakeLock() {
+        if (this.wakeLock) {
+            this.wakeLock.release();
+            this.wakeLock = null;
+            log('Screen wake lock released', 'info');
+        }
+    }
+
     /**
      * Start audio recording
      * @returns {Promise<void>} Resolves when recording starts
      */
     async startRecording() {
         try {
+            await this.requestWakeLock();
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
                     echoCancellation: true,
@@ -55,6 +76,7 @@ export class AudioService {
             log('Audio recording started', 'info');
             
         } catch (error) {
+            await this.requestWakeLock();
             log(`Failed to start recording: ${error.message}`, 'error');
             throw new Error(`Microphone access denied: ${error.message}`);
         }
@@ -67,6 +89,7 @@ export class AudioService {
     async stopRecording() {
         return new Promise((resolve, reject) => {
             if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
+                this.releaseWakeLock();
                 reject(new Error('No active recording to stop'));
                 return;
             }
@@ -76,6 +99,7 @@ export class AudioService {
             };
 
             this.mediaRecorder.onstop = () => {
+                this.releaseWakeLock();
                 const duration = Math.floor((Date.now() - this.recordingStartTime) / 1000);
                 const mimeType = this.getSupportedMimeType();
                 const audioBlob = new Blob(this.audioChunks, { type: mimeType });
@@ -96,6 +120,7 @@ export class AudioService {
             };
 
             this.mediaRecorder.onerror = (error) => {
+                this.releaseWakeLock();
                 log(`Recording error: ${error.message}`, 'error');
                 this.cleanup(); // Clean up on error
                 reject(error);
@@ -306,6 +331,9 @@ export class AudioService {
      * Clean up resources - FIXED: Proper memory cleanup
      */
     cleanup() {
+        // Release wake lock during cleanup
+        this.releaseWakeLock();
+    
         // Stop and clean up media recorder
         if (this.mediaRecorder) {
             if (this.mediaRecorder.state === 'recording') {
