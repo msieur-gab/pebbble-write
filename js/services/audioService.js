@@ -11,6 +11,42 @@ export class AudioService {
         this.wakeLock = null;
     }
 
+    async requestWakeLock() {
+        if (!('wakeLock' in navigator)) {
+            log('❌ Wake Lock API not supported in this browser', 'warning');
+            return;
+        }
+
+        try {
+            this.wakeLock = await navigator.wakeLock.request('screen');
+            log('✅ Screen wake lock activated for recording', 'success');
+            
+            // Debug: Log when wake lock is released (by system)
+            this.wakeLock.addEventListener('release', () => {
+                log('⚠️ Wake lock was released by system', 'warning');
+                this.wakeLock = null;
+            });
+
+        } catch (error) {
+            log(`❌ Wake lock failed: ${error.message}`, 'error');
+            // Continue without wake lock - not critical
+        }
+    }
+
+    releaseWakeLock() {
+        if (this.wakeLock) {
+            this.wakeLock.release();
+            this.wakeLock = null;
+            log('🔓 Screen wake lock released manually', 'info');
+        }
+    }
+
+    // Add method to check wake lock status
+    isWakeLockActive() {
+        return this.wakeLock && !this.wakeLock.released;
+    }
+
+
     /**
      * Get supported audio format for recording
      * @returns {string} Supported MIME type
@@ -28,25 +64,7 @@ export class AudioService {
         return supported;
     }
 
-    async requestWakeLock() {
-        if ('wakeLock' in navigator) {
-            try {
-                this.wakeLock = await navigator.wakeLock.request('screen');
-                log('Screen wake lock activated for recording', 'info');
-            } catch (error) {
-                log(`Wake lock failed: ${error.message}`, 'warning');
-                // Continue without wake lock - not critical
-            }
-        }
-    }
-
-    releaseWakeLock() {
-        if (this.wakeLock) {
-            this.wakeLock.release();
-            this.wakeLock = null;
-            log('Screen wake lock released', 'info');
-        }
-    }
+    
 
     /**
      * Start audio recording

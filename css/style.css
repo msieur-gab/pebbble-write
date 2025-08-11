@@ -247,6 +247,24 @@ toast-component {
     display: none;
 }
 
+.log-container.debug-active {
+    display: block !important;
+    /* position: fixed; */
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: #1f2937;
+    color: #d1d5db;
+    border-radius: 0.5rem 0.5rem 0 0;
+    padding: 0.5rem;
+    max-height: 30vh;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 0.75rem;
+    /* z-index: 100; */
+    border-top: 2px solid #22c55e;
+}
+
 /* Tablet and up: restore some desktop-like behavior */
 @media (min-width: 768px) {
     .app-container {
@@ -275,6 +293,14 @@ toast-component {
         width: 90%;
         max-width: 400px;
         border-radius: 1rem;
+    }
+    
+    .log-container.debug-active {
+        position: static;
+        max-height: 8rem;
+        margin-top: 2rem;
+        padding: 1rem;
+        border-top: none;
     }
     
     .log-container {

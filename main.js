@@ -6,15 +6,25 @@
 
 import { log } from './js/utils/log.js';
 import { config } from './config.js';
-// import './js/components/writerApp.js';
 import './js/components/mainApp.js';
-import './js/components/ui/toast.js'; // Import the new toast component
+import './js/components/ui/toast.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     const logContainer = document.getElementById('logContainer');
+    
     if (!config.DEBUG_MODE) {
         logContainer.style.display = 'none';
     } else {
-        log('Application initialized. Debug mode is active.', 'info');
+        // ✅ FIXED: Add debug-active class to override mobile CSS
+        logContainer.classList.add('debug-active');
+        log('🐛 Debug mode active - logs visible on mobile!', 'success');
+        log('Application initialized successfully', 'info');
+        
+        // Add debug info for wake lock
+        if ('wakeLock' in navigator) {
+            log('✅ Wake Lock API available', 'success');
+        } else {
+            log('❌ Wake Lock API not supported', 'warning');
+        }
     }
 });
